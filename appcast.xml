@@ -6,15 +6,15 @@
     <description>Most recent changes with links to updates.</description>
     <language>en</language>
     <item>
-      <title>Version 3.2.0</title>
-      <pubDate>Wed, 24 Jun 2026 15:55:13 +0000</pubDate>
-      <sparkle:version>3.2.0</sparkle:version>
-      <sparkle:shortVersionString>3.2.0</sparkle:shortVersionString>
+      <title>Version 3.3.0</title>
+      <pubDate>Wed, 24 Jun 2026 16:06:13 +0000</pubDate>
+      <sparkle:version>3.3.0</sparkle:version>
+      <sparkle:shortVersionString>3.3.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/phuonger/AssetMeow/releases/download/v3.2.0/AssetMeow.zip"
-                 sparkle:version="3.2.0"
-                 sparkle:shortVersionString="3.2.0"
-                 length="7138948"
+      <enclosure url="https://github.com/phuonger/AssetMeow/releases/download/v3.3.0/AssetMeow.zip"
+                 sparkle:version="3.3.0"
+                 sparkle:shortVersionString="3.3.0"
+                 length="7138935"
                  type="application/octet-stream" />
     </item>
   </channel>
