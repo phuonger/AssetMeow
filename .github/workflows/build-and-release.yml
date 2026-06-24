@@ -202,7 +202,7 @@ jobs:
         <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
           <channel>
             <title>AssetMeow Updates</title>
-            <link>https://raw.githubusercontent.com/phuonger/AssetMeow-updates/main/appcast.xml</link>
+            <link>https://raw.githubusercontent.com/phuonger/AssetMeow/main/appcast.xml</link>
             <description>Most recent changes with links to updates.</description>
             <language>en</language>
             <item>
@@ -251,19 +251,18 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Update appcast.xml in public updates repo
-      env:
-        PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+    - name: Update appcast.xml in repo
       run: |
-        cd /tmp
-        git clone https://x-access-token:${PAT_TOKEN}@github.com/phuonger/AssetMeow-updates.git
-        cd AssetMeow-updates
-        cp $GITHUB_WORKSPACE/build/appcast.xml appcast.xml
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
+        git fetch origin main
+        git checkout main
+        cp build/appcast.xml appcast.xml
         git add appcast.xml
-        git commit -m "Update appcast for AssetMeow v${{ steps.version.outputs.VERSION }}" || echo "No changes"
+        git commit -m "Update appcast.xml for v${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
         git push origin main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Cleanup keychain
       if: always()
