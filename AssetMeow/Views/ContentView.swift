@@ -281,6 +281,16 @@ struct ContentView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+                
+                // Version number
+                HStack {
+                    Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(AppTheme.textMuted.opacity(0.6))
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
                 .padding(.bottom, 12)
             }
         }
