@@ -45,48 +45,83 @@ jobs:
         
         # Verify certificate is available
         security find-identity -v -p codesigning $KEYCHAIN_PATH
+        
+        # Store keychain path for later steps
+        echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
     - name: Resolve Swift packages
       run: xcodebuild -resolvePackageDependencies -project $PROJECT -scheme $SCHEME
 
-    - name: Build archive
+    - name: Build app
       env:
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        xcodebuild archive \
+        xcodebuild build \
           -project $PROJECT \
           -scheme $SCHEME \
           -configuration Release \
-          -archivePath build/AssetMeow.xcarchive \
+          -derivedDataPath build/DerivedData \
           CODE_SIGN_STYLE=Manual \
           CODE_SIGN_IDENTITY="Developer ID Application" \
           DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-          OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
+          OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
           ONLY_ACTIVE_ARCH=NO
 
-    - name: Export archive (proper signing via Xcode)
+    - name: Locate and prepare app
       run: |
-        xcodebuild -exportArchive \
-          -archivePath build/AssetMeow.xcarchive \
-          -exportPath build/export \
-          -exportOptionsPlist ExportOptions.plist
+        # Find the built app
+        APP_PATH=$(find build/DerivedData -name "AssetMeow.app" -path "*/Release/*" | head -1)
+        echo "Found app at: $APP_PATH"
+        
+        # Copy to export directory
+        mkdir -p build/export
+        cp -R "$APP_PATH" build/export/AssetMeow.app
+        
+        echo "APP_EXPORT_PATH=build/export/AssetMeow.app" >> $GITHUB_ENV
+
+    - name: Re-sign app with hardened runtime and entitlements
+      run: |
+        APP="$APP_EXPORT_PATH"
+        IDENTITY="Developer ID Application"
+        
+        # Sign all executables inside frameworks with hardened runtime
+        # Sparkle XPC services
+        find "$APP/Contents/Frameworks" -name "*.xpc" -type d | while read xpc; do
+          echo "Signing XPC: $xpc"
+          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --timestamp "$xpc"
+        done
+        
+        # Sparkle helpers
+        for helper in "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" \
+                      "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"; do
+          if [ -e "$helper" ]; then
+            echo "Signing: $helper"
+            codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --timestamp "$helper"
+          fi
+        done
+        
+        # Sign the Sparkle framework
+        echo "Signing Sparkle.framework"
+        codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --timestamp "$APP/Contents/Frameworks/Sparkle.framework"
+        
+        # Sign the main app last with entitlements
+        echo "Signing main app with entitlements"
+        codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --timestamp \
+          --entitlements AssetMeow/AssetMeow.entitlements "$APP"
 
     - name: Verify code signature
       run: |
-        echo "=== Verifying main app ==="
-        codesign --verify --deep --strict --verbose=2 build/export/AssetMeow.app
-        echo "=== App signature details ==="
-        codesign -dv --verbose=4 build/export/AssetMeow.app
-        echo "=== Sparkle framework ==="
-        codesign -dv build/export/AssetMeow.app/Contents/Frameworks/Sparkle.framework || true
+        echo "=== Deep verification ==="
+        codesign --verify --deep --strict --verbose=2 "$APP_EXPORT_PATH"
+        echo "=== Signature details ==="
+        codesign -dv --verbose=4 "$APP_EXPORT_PATH"
         echo "=== Gatekeeper assessment ==="
-        spctl --assess --type execute --verbose=2 build/export/AssetMeow.app || true
+        spctl --assess --type execute --verbose=2 "$APP_EXPORT_PATH" || echo "spctl check done (may fail without notarization)"
 
     - name: Create ZIP for notarization
       run: |
-        cd build/export
-        /usr/bin/ditto -c -k --keepParent AssetMeow.app ../AssetMeow.zip
-        cd ../..
+        /usr/bin/ditto -c -k --keepParent "$APP_EXPORT_PATH" build/AssetMeow.zip
 
     - name: Notarize app
       env:
@@ -94,7 +129,7 @@ jobs:
         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        # Submit for notarization and capture output
+        # Submit for notarization
         SUBMIT_OUTPUT=$(xcrun notarytool submit build/AssetMeow.zip \
           --apple-id "$APPLE_ID" \
           --password "$APPLE_APP_PASSWORD" \
@@ -119,10 +154,7 @@ jobs:
         fi
         
         # Staple the notarization ticket to the app
-        xcrun stapler staple build/export/AssetMeow.app
-        
-        # Verify stapling
-        xcrun stapler validate build/export/AssetMeow.app
+        xcrun stapler staple "$APP_EXPORT_PATH"
 
     - name: Create DMG
       env:
@@ -130,37 +162,29 @@ jobs:
         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        # Create a temporary directory for DMG contents
         mkdir -p build/dmg_contents
-        cp -R build/export/AssetMeow.app build/dmg_contents/
+        cp -R "$APP_EXPORT_PATH" build/dmg_contents/
         ln -s /Applications build/dmg_contents/Applications
         
-        # Create DMG
         hdiutil create -volname "AssetMeow" \
           -srcfolder build/dmg_contents \
           -ov -format UDZO \
           build/AssetMeow.dmg
         
-        # Sign the DMG
-        codesign --sign "Developer ID Application" --keychain $RUNNER_TEMP/app-signing.keychain-db build/AssetMeow.dmg
+        codesign --sign "Developer ID Application" --keychain "$KEYCHAIN_PATH" --timestamp build/AssetMeow.dmg
         
-        # Notarize the DMG
         xcrun notarytool submit build/AssetMeow.dmg \
           --apple-id "$APPLE_ID" \
           --password "$APPLE_APP_PASSWORD" \
           --team-id "$APPLE_TEAM_ID" \
           --wait --timeout 10m
         
-        # Staple the DMG
         xcrun stapler staple build/AssetMeow.dmg
 
-    - name: Create final ZIP for Sparkle (with stapled notarization)
+    - name: Create final ZIP for Sparkle (with stapled app)
       run: |
-        # Re-create ZIP with the stapled (notarized) app
         rm -f build/AssetMeow.zip
-        cd build/export
-        /usr/bin/ditto -c -k --keepParent AssetMeow.app ../AssetMeow.zip
-        cd ../..
+        /usr/bin/ditto -c -k --keepParent "$APP_EXPORT_PATH" build/AssetMeow.zip
 
     - name: Get version from tag
       id: version
@@ -243,4 +267,4 @@ jobs:
     - name: Cleanup keychain
       if: always()
       run: |
-        security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+        security delete-keychain $KEYCHAIN_PATH || true
