@@ -253,10 +253,10 @@ jobs:
 
     - name: Update appcast.xml in public updates repo
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         cd /tmp
-        git clone https://x-access-token:${GITHUB_TOKEN}@github.com/phuonger/AssetMeow-updates.git
+        git clone https://x-access-token:${PAT_TOKEN}@github.com/phuonger/AssetMeow-updates.git
         cd AssetMeow-updates
         cp $GITHUB_WORKSPACE/build/appcast.xml appcast.xml
         git config user.name "GitHub Actions"
