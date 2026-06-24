@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # Trigger on version tags like v2.1.0
 
+permissions:
+  contents: write
+
 env:
   SCHEME: AssetMeow
   PROJECT: AssetMeow.xcodeproj
