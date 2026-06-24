@@ -27,8 +27,31 @@ struct CheckForUpdatesView: View {
     }
 }
 
+// AppDelegate to handle dock icon click re-opening the window
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            // No visible windows — re-open the main window
+            for window in sender.windows {
+                if window.canBecomeMain {
+                    window.makeKeyAndOrderFront(self)
+                    return true
+                }
+            }
+            // If no existing window found, the WindowGroup will create a new one
+        }
+        return true
+    }
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Keep app running when window is closed (standard macOS behavior)
+        return false
+    }
+}
+
 @main
 struct AssetMeowApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     
     // Sparkle updater controller - starts checking for updates automatically
