@@ -43,7 +43,7 @@ jobs:
         security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
         security list-keychain -d user -s $KEYCHAIN_PATH
         
-        # Verify certificate is available
+        # Verify certificate is available and show identity
         security find-identity -v -p codesigning $KEYCHAIN_PATH
 
     - name: Resolve Swift packages
@@ -64,15 +64,50 @@ jobs:
           OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
           ONLY_ACTIVE_ARCH=NO
 
-    - name: Export app from archive
+    - name: Export and deep-sign app
       run: |
         mkdir -p build/export
         cp -R build/AssetMeow.xcarchive/Products/Applications/AssetMeow.app build/export/
+        
+        APP_PATH="build/export/AssetMeow.app"
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        IDENTITY="Developer ID Application"
+        
+        # Find and re-sign all Sparkle XPC services and helpers with hardened runtime
+        # Sign XPC services
+        find "$APP_PATH" -name "*.xpc" -print0 | while IFS= read -r -d '' xpc; do
+          echo "Signing XPC: $xpc"
+          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$xpc"
+        done
+        
+        # Sign Autoupdate helper
+        if [ -f "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" ]; then
+          echo "Signing Autoupdate"
+          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+        fi
+        
+        # Sign Updater.app
+        if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" ]; then
+          echo "Signing Updater.app"
+          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
+        fi
+        
+        # Sign Sparkle framework itself
+        if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework" ]; then
+          echo "Signing Sparkle.framework"
+          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+        fi
+        
+        # Re-sign the main app bundle (must be last)
+        echo "Signing main app"
+        codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --entitlements AssetMeow/AssetMeow.entitlements "$APP_PATH"
 
     - name: Verify code signature
       run: |
         codesign --verify --deep --strict build/export/AssetMeow.app
         codesign -dv --verbose=4 build/export/AssetMeow.app
+        echo "--- Checking all code signatures ---"
+        codesign --verify --deep --strict --verbose=2 build/export/AssetMeow.app
 
     - name: Create ZIP for notarization
       run: |
@@ -86,12 +121,29 @@ jobs:
         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        # Submit for notarization
-        xcrun notarytool submit build/AssetMeow.zip \
+        # Submit for notarization and capture the submission ID
+        SUBMIT_OUTPUT=$(xcrun notarytool submit build/AssetMeow.zip \
           --apple-id "$APPLE_ID" \
           --password "$APPLE_APP_PASSWORD" \
           --team-id "$APPLE_TEAM_ID" \
-          --wait --timeout 10m
+          --wait --timeout 10m 2>&1) || true
+        
+        echo "$SUBMIT_OUTPUT"
+        
+        # Extract submission ID
+        SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep "id:" | head -1 | awk '{print $2}')
+        
+        # Check if notarization succeeded
+        if echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
+          echo "Notarization succeeded!"
+        else
+          echo "Notarization failed. Fetching log..."
+          xcrun notarytool log "$SUBMISSION_ID" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" || true
+          exit 1
+        fi
         
         # Staple the notarization ticket to the app
         xcrun stapler staple build/export/AssetMeow.app
@@ -100,6 +152,10 @@ jobs:
         xcrun stapler validate build/export/AssetMeow.app
 
     - name: Create DMG
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
         # Create a temporary directory for DMG contents
         mkdir -p build/dmg_contents
@@ -115,7 +171,7 @@ jobs:
         # Sign the DMG
         codesign --sign "Developer ID Application" --keychain $RUNNER_TEMP/app-signing.keychain-db build/AssetMeow.dmg
         
-        # Notarize the DMG too
+        # Notarize the DMG
         xcrun notarytool submit build/AssetMeow.dmg \
           --apple-id "$APPLE_ID" \
           --password "$APPLE_APP_PASSWORD" \
@@ -124,10 +180,6 @@ jobs:
         
         # Staple the DMG
         xcrun stapler staple build/AssetMeow.dmg
-      env:
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
     - name: Create final ZIP for Sparkle (with stapled notarization)
       run: |
