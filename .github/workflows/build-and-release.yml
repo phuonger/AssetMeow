@@ -74,6 +74,31 @@ jobs:
         codesign --verify --deep --strict build/export/AssetMeow.app
         codesign -dv --verbose=4 build/export/AssetMeow.app
 
+    - name: Create ZIP for notarization
+      run: |
+        cd build/export
+        zip -r ../AssetMeow.zip AssetMeow.app
+        cd ../..
+
+    - name: Notarize app
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        # Submit for notarization
+        xcrun notarytool submit build/AssetMeow.zip \
+          --apple-id "$APPLE_ID" \
+          --password "$APPLE_APP_PASSWORD" \
+          --team-id "$APPLE_TEAM_ID" \
+          --wait --timeout 10m
+        
+        # Staple the notarization ticket to the app
+        xcrun stapler staple build/export/AssetMeow.app
+        
+        # Verify stapling
+        xcrun stapler validate build/export/AssetMeow.app
+
     - name: Create DMG
       run: |
         # Create a temporary directory for DMG contents
@@ -87,11 +112,27 @@ jobs:
           -ov -format UDZO \
           build/AssetMeow.dmg
         
-        # Sign the DMG too
+        # Sign the DMG
         codesign --sign "Developer ID Application" --keychain $RUNNER_TEMP/app-signing.keychain-db build/AssetMeow.dmg
+        
+        # Notarize the DMG too
+        xcrun notarytool submit build/AssetMeow.dmg \
+          --apple-id "$APPLE_ID" \
+          --password "$APPLE_APP_PASSWORD" \
+          --team-id "$APPLE_TEAM_ID" \
+          --wait --timeout 10m
+        
+        # Staple the DMG
+        xcrun stapler staple build/AssetMeow.dmg
+      env:
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-    - name: Create ZIP for Sparkle
+    - name: Create final ZIP for Sparkle (with stapled notarization)
       run: |
+        # Re-create ZIP with the stapled (notarized) app
+        rm -f build/AssetMeow.zip
         cd build/export
         zip -r ../AssetMeow.zip AssetMeow.app
         cd ../..
@@ -149,7 +190,7 @@ jobs:
           ### Installation
           - Download `AssetMeow.dmg` and drag to Applications
           - Existing users will receive this update automatically via in-app updater
-          - This build is **signed with Developer ID** — no Gatekeeper warnings
+          - This build is **signed and notarized** — no Gatekeeper warnings
           
           ### Changes
           See commit history for details.
