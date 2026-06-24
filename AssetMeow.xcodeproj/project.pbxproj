@@ -180,6 +180,9 @@
 			dependencies = (
 			);
 			name = AssetMeow;
+			packageProductDependencies = (
+				PKG000002 /* Sparkle */,
+			);
 			productName = AssetMeow;
 			productReference = B1000020 /* AssetMeow.app */;
 			productType = "com.apple.product-type.application";
@@ -208,6 +211,9 @@
 				Base,
 			);
 			mainGroup = D1000001;
+			packageReferences = (
+				PKG000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = D1000010 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -216,6 +222,25 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		PKG000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		PKG000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PKG000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		C1000003 /* Resources */ = {
@@ -389,6 +414,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AssetMeow/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AssetMeow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 AssetMeow. All rights reserved.";
@@ -416,6 +442,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AssetMeow/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AssetMeow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright 2026 AssetMeow. All rights reserved.";

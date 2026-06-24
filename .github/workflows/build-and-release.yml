@@ -1,0 +1,137 @@
+name: Build & Release AssetMeow
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v2.1.0
+
+env:
+  SCHEME: AssetMeow
+  PROJECT: AssetMeow.xcodeproj
+
+jobs:
+  build:
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Resolve Swift packages
+      run: xcodebuild -resolvePackageDependencies -project $PROJECT -scheme $SCHEME
+
+    - name: Build archive
+      run: |
+        xcodebuild archive \
+          -project $PROJECT \
+          -scheme $SCHEME \
+          -configuration Release \
+          -archivePath build/AssetMeow.xcarchive \
+          CODE_SIGN_IDENTITY="-" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          ONLY_ACTIVE_ARCH=NO
+
+    - name: Export app from archive
+      run: |
+        mkdir -p build/export
+        cp -R build/AssetMeow.xcarchive/Products/Applications/AssetMeow.app build/export/
+
+    - name: Create DMG
+      run: |
+        # Create a temporary directory for DMG contents
+        mkdir -p build/dmg_contents
+        cp -R build/export/AssetMeow.app build/dmg_contents/
+        ln -s /Applications build/dmg_contents/Applications
+        
+        # Create DMG
+        hdiutil create -volname "AssetMeow" \
+          -srcfolder build/dmg_contents \
+          -ov -format UDZO \
+          build/AssetMeow.dmg
+
+    - name: Create ZIP for Sparkle
+      run: |
+        cd build/export
+        zip -r ../AssetMeow.zip AssetMeow.app
+        cd ../..
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Generate appcast entry
+      run: |
+        ZIP_SIZE=$(stat -f%z build/AssetMeow.zip)
+        VERSION=${{ steps.version.outputs.VERSION }}
+        TAG=${GITHUB_REF#refs/tags/}
+        DATE=$(date -R)
+        
+        cat > build/appcast.xml << EOF
+        <?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <channel>
+            <title>AssetMeow Updates</title>
+            <link>https://raw.githubusercontent.com/phuonger/AssetMeow/main/appcast.xml</link>
+            <description>Most recent changes with links to updates.</description>
+            <language>en</language>
+            <item>
+              <title>Version ${VERSION}</title>
+              <pubDate>${DATE}</pubDate>
+              <sparkle:version>${VERSION}</sparkle:version>
+              <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+              <enclosure url="https://github.com/phuonger/AssetMeow/releases/download/${TAG}/AssetMeow.zip"
+                         sparkle:version="${VERSION}"
+                         sparkle:shortVersionString="${VERSION}"
+                         length="${ZIP_SIZE}"
+                         type="application/octet-stream" />
+            </item>
+          </channel>
+        </rss>
+        EOF
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: AssetMeow-${{ steps.version.outputs.VERSION }}
+        path: |
+          build/AssetMeow.dmg
+          build/AssetMeow.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: AssetMeow v${{ steps.version.outputs.VERSION }}
+        body: |
+          ## AssetMeow v${{ steps.version.outputs.VERSION }}
+          
+          ### Installation
+          - Download `AssetMeow.dmg` and drag to Applications
+          - Existing users will receive this update automatically via in-app updater
+          
+          ### Changes
+          See commit history for details.
+        files: |
+          build/AssetMeow.dmg
+          build/AssetMeow.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update appcast.xml in repo
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git fetch origin main
+        git checkout main
+        cp build/appcast.xml appcast.xml
+        git add appcast.xml
+        git commit -m "Update appcast.xml for v${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
+        git push origin main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
