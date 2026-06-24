@@ -23,25 +23,56 @@ jobs:
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
+    - name: Install certificate
+      env:
+        CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      run: |
+        # Create a temporary keychain
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+        
+        # Create keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        
+        # Import certificate
+        echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+        security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+        
+        # Verify certificate is available
+        security find-identity -v -p codesigning $KEYCHAIN_PATH
+
     - name: Resolve Swift packages
       run: xcodebuild -resolvePackageDependencies -project $PROJECT -scheme $SCHEME
 
     - name: Build archive
+      env:
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
         xcodebuild archive \
           -project $PROJECT \
           -scheme $SCHEME \
           -configuration Release \
           -archivePath build/AssetMeow.xcarchive \
-          CODE_SIGN_IDENTITY="-" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGN_STYLE=Manual \
+          CODE_SIGN_IDENTITY="Developer ID Application" \
+          DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+          OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
           ONLY_ACTIVE_ARCH=NO
 
     - name: Export app from archive
       run: |
         mkdir -p build/export
         cp -R build/AssetMeow.xcarchive/Products/Applications/AssetMeow.app build/export/
+
+    - name: Verify code signature
+      run: |
+        codesign --verify --deep --strict build/export/AssetMeow.app
+        codesign -dv --verbose=4 build/export/AssetMeow.app
 
     - name: Create DMG
       run: |
@@ -55,6 +86,9 @@ jobs:
           -srcfolder build/dmg_contents \
           -ov -format UDZO \
           build/AssetMeow.dmg
+        
+        # Sign the DMG too
+        codesign --sign "Developer ID Application" --keychain $RUNNER_TEMP/app-signing.keychain-db build/AssetMeow.dmg
 
     - name: Create ZIP for Sparkle
       run: |
@@ -115,6 +149,7 @@ jobs:
           ### Installation
           - Download `AssetMeow.dmg` and drag to Applications
           - Existing users will receive this update automatically via in-app updater
+          - This build is **signed with Developer ID** — no Gatekeeper warnings
           
           ### Changes
           See commit history for details.
@@ -138,3 +173,8 @@ jobs:
         git push origin main
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Cleanup keychain
+      if: always()
+      run: |
+        security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
