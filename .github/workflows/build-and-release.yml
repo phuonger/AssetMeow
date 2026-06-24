@@ -43,7 +43,7 @@ jobs:
         security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
         security list-keychain -d user -s $KEYCHAIN_PATH
         
-        # Verify certificate is available and show identity
+        # Verify certificate is available
         security find-identity -v -p codesigning $KEYCHAIN_PATH
 
     - name: Resolve Swift packages
@@ -64,55 +64,28 @@ jobs:
           OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
           ONLY_ACTIVE_ARCH=NO
 
-    - name: Export and deep-sign app
+    - name: Export archive (proper signing via Xcode)
       run: |
-        mkdir -p build/export
-        cp -R build/AssetMeow.xcarchive/Products/Applications/AssetMeow.app build/export/
-        
-        APP_PATH="build/export/AssetMeow.app"
-        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-        IDENTITY="Developer ID Application"
-        
-        # Find and re-sign all Sparkle XPC services and helpers with hardened runtime
-        # Sign XPC services
-        find "$APP_PATH" -name "*.xpc" -print0 | while IFS= read -r -d '' xpc; do
-          echo "Signing XPC: $xpc"
-          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$xpc"
-        done
-        
-        # Sign Autoupdate helper
-        if [ -f "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate" ]; then
-          echo "Signing Autoupdate"
-          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
-        fi
-        
-        # Sign Updater.app
-        if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app" ]; then
-          echo "Signing Updater.app"
-          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
-        fi
-        
-        # Sign Sparkle framework itself
-        if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework" ]; then
-          echo "Signing Sparkle.framework"
-          codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime "$APP_PATH/Contents/Frameworks/Sparkle.framework"
-        fi
-        
-        # Re-sign the main app bundle (must be last)
-        echo "Signing main app"
-        codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --entitlements AssetMeow/AssetMeow.entitlements "$APP_PATH"
+        xcodebuild -exportArchive \
+          -archivePath build/AssetMeow.xcarchive \
+          -exportPath build/export \
+          -exportOptionsPlist ExportOptions.plist
 
     - name: Verify code signature
       run: |
-        codesign --verify --deep --strict build/export/AssetMeow.app
-        codesign -dv --verbose=4 build/export/AssetMeow.app
-        echo "--- Checking all code signatures ---"
+        echo "=== Verifying main app ==="
         codesign --verify --deep --strict --verbose=2 build/export/AssetMeow.app
+        echo "=== App signature details ==="
+        codesign -dv --verbose=4 build/export/AssetMeow.app
+        echo "=== Sparkle framework ==="
+        codesign -dv build/export/AssetMeow.app/Contents/Frameworks/Sparkle.framework || true
+        echo "=== Gatekeeper assessment ==="
+        spctl --assess --type execute --verbose=2 build/export/AssetMeow.app || true
 
     - name: Create ZIP for notarization
       run: |
         cd build/export
-        zip -r ../AssetMeow.zip AssetMeow.app
+        /usr/bin/ditto -c -k --keepParent AssetMeow.app ../AssetMeow.zip
         cd ../..
 
     - name: Notarize app
@@ -121,7 +94,7 @@ jobs:
         APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        # Submit for notarization and capture the submission ID
+        # Submit for notarization and capture output
         SUBMIT_OUTPUT=$(xcrun notarytool submit build/AssetMeow.zip \
           --apple-id "$APPLE_ID" \
           --password "$APPLE_APP_PASSWORD" \
@@ -186,7 +159,7 @@ jobs:
         # Re-create ZIP with the stapled (notarized) app
         rm -f build/AssetMeow.zip
         cd build/export
-        zip -r ../AssetMeow.zip AssetMeow.app
+        /usr/bin/ditto -c -k --keepParent AssetMeow.app ../AssetMeow.zip
         cd ../..
 
     - name: Get version from tag
