@@ -354,6 +354,9 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
     var action: String?
     var assetTag: String?
     var model: String?
+    var category: String?
+    var make: String?
+    var sku: String?
     var fromLocation: String?
     var toLocation: String?
     var fromPerson: String?
@@ -368,6 +371,9 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
         case action
         case assetTag = "asset_tag"
         case model
+        case category
+        case make
+        case sku
         case fromLocation = "from_location"
         case toLocation = "to_location"
         case fromPerson = "from_person"
@@ -396,6 +402,9 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
         action = try? container.decodeIfPresent(String.self, forKey: .action)
         assetTag = try? container.decodeIfPresent(String.self, forKey: .assetTag)
         model = try? container.decodeIfPresent(String.self, forKey: .model)
+        category = try? container.decodeIfPresent(String.self, forKey: .category)
+        make = try? container.decodeIfPresent(String.self, forKey: .make)
+        sku = try? container.decodeIfPresent(String.self, forKey: .sku)
         fromLocation = try? container.decodeIfPresent(String.self, forKey: .fromLocation)
         toLocation = try? container.decodeIfPresent(String.self, forKey: .toLocation)
         fromPerson = try? container.decodeIfPresent(String.self, forKey: .fromPerson)

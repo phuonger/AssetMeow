@@ -30,6 +30,8 @@ struct ScanCheckoutView: View {
     @State private var newPersonName = ""
     @State private var newPersonRole = ""
     @State private var checkoutNotes = ""
+    @State private var perDeviceNotes: [String: String] = [:]  // assetTag -> note
+    @State private var expandedNoteTag: String? = nil  // which device note is expanded
     
     // Status
     @State private var isProcessing = false
@@ -462,166 +464,187 @@ struct ScanCheckoutView: View {
     
     // MARK: - Step 3: Assign
     var assignStepView: some View {
-        VStack(spacing: 20) {
-            // Assignment form
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Assigning \(scannedTags.count) devices")
-                        .font(AppTheme.headingFont)
-                        .foregroundColor(AppTheme.textPrimary)
-                    Text("Choose where these devices are going")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    
-                    // Show skipped warning if any
-                    if !skippedNotFoundTags.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 11))
-                                .foregroundColor(AppTheme.accentOrange)
-                            Text("\(skippedNotFoundTags.count) unknown tag(s) were skipped and will be logged")
-                                .font(.system(size: 11))
-                                .foregroundColor(AppTheme.accentOrange)
-                        }
-                        .padding(.top, 2)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                // Location (destination = current location during checkout)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Destination (Current Location)")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    HStack {
-                        Picker("", selection: $selectedLocation) {
-                            Text("-- Select --").tag(nil as Location?)
-                            ForEach(appState.locations, id: \.id) { loc in
-                                Text(loc.name).tag(Optional(loc))
-                            }
-                        }
-                        .frame(width: 220)
-                        
-                        Button(action: { showNewLocation.toggle(); showNewPerson = false }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                Text("New")
-                            }
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Assigning \(scannedTags.count) devices")
+                            .font(AppTheme.headingFont)
+                            .foregroundColor(AppTheme.textPrimary)
+                        Text("Choose where these devices are going")
                             .font(AppTheme.captionFont)
-                            .foregroundColor(AppTheme.primaryPurpleLight)
+                            .foregroundColor(AppTheme.textSecondary)
+                        
+                        // Show skipped warning if any
+                        if !skippedNotFoundTags.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.accentOrange)
+                                Text("\(skippedNotFoundTags.count) unknown tag(s) were skipped and will be logged")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.accentOrange)
+                            }
+                            .padding(.top, 2)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 20)
                     
-                    if showNewLocation {
-                        HStack(spacing: 8) {
-                            TextField("New location name", text: $newLocationName)
-                                .darkTextField()
-                                .frame(width: 200)
-                            Button(action: {
-                                Task {
-                                    if let loc = await appState.createLocation(name: newLocationName) {
-                                        // Find the location from the updated array to ensure picker tag match
-                                        if let matchedLoc = appState.locations.first(where: { $0.id == loc.id }) {
-                                            selectedLocation = matchedLoc
-                                        } else {
-                                            selectedLocation = loc
-                                        }
-                                        newLocationName = ""
-                                        showNewLocation = false
+                    // Assignment form
+                    VStack(spacing: 16) {
+                        // Location (destination = current location during checkout)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Destination (Current Location)")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.textSecondary)
+                            HStack {
+                                Picker("", selection: $selectedLocation) {
+                                    Text("-- Select --").tag(nil as Location?)
+                                    ForEach(appState.locations, id: \.id) { loc in
+                                        Text(loc.name).tag(Optional(loc))
                                     }
                                 }
-                            }) {
-                                Text("Create")
+                                .frame(width: 220)
+                                
+                                Button(action: { showNewLocation.toggle(); showNewPerson = false }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus")
+                                        Text("New")
+                                    }
                                     .font(AppTheme.captionFont)
                                     .foregroundColor(AppTheme.primaryPurpleLight)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(newLocationName.trimmingCharacters(in: .whitespaces).isEmpty)
-                        }
-                    }
-                }
-                
-                // Person
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Assigned To")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    HStack {
-                        Picker("", selection: $selectedPerson) {
-                            Text("-- None --").tag(nil as Person?)
-                            ForEach(appState.people, id: \.id) { person in
-                                Text(person.name).tag(Optional(person))
-                            }
-                        }
-                        .frame(width: 220)
-                        
-                        Button(action: { showNewPerson.toggle(); showNewLocation = false }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                Text("New")
-                            }
-                            .font(AppTheme.captionFont)
-                            .foregroundColor(AppTheme.primaryPurpleLight)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    if showNewPerson {
-                        HStack(spacing: 8) {
-                            TextField("Person name", text: $newPersonName)
-                                .darkTextField()
-                                .frame(width: 140)
-                            TextField("Role (optional)", text: $newPersonRole)
-                                .darkTextField()
-                                .frame(width: 120)
-                            Button(action: {
-                                Task {
-                                    let role = newPersonRole.isEmpty ? nil : newPersonRole
-                                    if let person = await appState.createPerson(name: newPersonName, role: role) {
-                                        // Find the person from the updated people array to ensure picker tag match
-                                        if let matchedPerson = appState.people.first(where: { $0.id == person.id }) {
-                                            selectedPerson = matchedPerson
-                                        } else {
-                                            selectedPerson = person
+                            
+                            if showNewLocation {
+                                HStack(spacing: 8) {
+                                    TextField("New location name", text: $newLocationName)
+                                        .darkTextField()
+                                        .frame(width: 200)
+                                    Button(action: {
+                                        Task {
+                                            if let loc = await appState.createLocation(name: newLocationName) {
+                                                if let matchedLoc = appState.locations.first(where: { $0.id == loc.id }) {
+                                                    selectedLocation = matchedLoc
+                                                } else {
+                                                    selectedLocation = loc
+                                                }
+                                                newLocationName = ""
+                                                showNewLocation = false
+                                            }
                                         }
-                                        newPersonName = ""
-                                        newPersonRole = ""
-                                        showNewPerson = false
+                                    }) {
+                                        Text("Create")
+                                            .font(AppTheme.captionFont)
+                                            .foregroundColor(AppTheme.primaryPurpleLight)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(newLocationName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                }
+                            }
+                        }
+                        
+                        // Person
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Assigned To")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.textSecondary)
+                            HStack {
+                                Picker("", selection: $selectedPerson) {
+                                    Text("-- None --").tag(nil as Person?)
+                                    ForEach(appState.people, id: \.id) { person in
+                                        Text(person.name).tag(Optional(person))
                                     }
                                 }
-                            }) {
-                                Text("Create")
+                                .frame(width: 220)
+                                
+                                Button(action: { showNewPerson.toggle(); showNewLocation = false }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus")
+                                        Text("New")
+                                    }
                                     .font(AppTheme.captionFont)
                                     .foregroundColor(AppTheme.primaryPurpleLight)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(newPersonName.trimmingCharacters(in: .whitespaces).isEmpty)
+                            
+                            if showNewPerson {
+                                HStack(spacing: 8) {
+                                    TextField("Person name", text: $newPersonName)
+                                        .darkTextField()
+                                        .frame(width: 140)
+                                    TextField("Role (optional)", text: $newPersonRole)
+                                        .darkTextField()
+                                        .frame(width: 120)
+                                    Button(action: {
+                                        Task {
+                                            let role = newPersonRole.isEmpty ? nil : newPersonRole
+                                            if let person = await appState.createPerson(name: newPersonName, role: role) {
+                                                if let matchedPerson = appState.people.first(where: { $0.id == person.id }) {
+                                                    selectedPerson = matchedPerson
+                                                } else {
+                                                    selectedPerson = person
+                                                }
+                                                newPersonName = ""
+                                                newPersonRole = ""
+                                                showNewPerson = false
+                                            }
+                                        }
+                                    }) {
+                                        Text("Create")
+                                            .font(AppTheme.captionFont)
+                                            .foregroundColor(AppTheme.primaryPurpleLight)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(newPersonName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                }
+                            }
+                        }
+                        
+                        // Session Notes
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Session Note (applies to all)")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.textSecondary)
+                            TextField("Optional checkout notes for entire session", text: $checkoutNotes)
+                                .darkTextField()
+                                .frame(width: 350)
                         }
                     }
-                }
-                
-                // Notes
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Notes")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    TextField("Optional checkout notes", text: $checkoutNotes)
-                        .darkTextField()
-                        .frame(width: 350)
+                    .glowCardStyle()
+                    .padding(.horizontal, 40)
+                    
+                    // Per-device list with notes
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Devices (\(scannedTags.count))")
+                                .font(AppTheme.subheadingFont)
+                                .foregroundColor(AppTheme.textPrimary)
+                            Spacer()
+                            Text("Click note icon to add per-device note")
+                                .font(.system(size: 10))
+                                .foregroundColor(AppTheme.textMuted)
+                        }
+                        
+                        ForEach(scannedTags, id: \.self) { tag in
+                            checkoutDeviceRow(tag: tag)
+                        }
+                    }
+                    .padding(.horizontal, 40)
                 }
             }
-            .glowCardStyle()
-            .padding(.horizontal, 40)
-            .padding(.top, 20)
-            
-            Spacer()
             
             // Summary
             if selectedLocation == nil && selectedPerson == nil {
                 Text("Please select at least a location or person")
                     .font(AppTheme.captionFont)
                     .foregroundColor(AppTheme.statusMissing)
+                    .padding(.top, 8)
             }
             
             // Bottom buttons
@@ -650,6 +673,88 @@ struct ScanCheckoutView: View {
             }
             .padding(20)
         }
+    }
+    
+    // MARK: - Checkout Device Row with Per-Device Note
+    func checkoutDeviceRow(tag: String) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                // Device info from foundDevices
+                let device = foundDevices.first(where: { $0.assetTag == tag })
+                
+                CopyableAssetTag(assetTag: tag)
+                
+                if let cat = device?.category, !cat.isEmpty {
+                    Text(cat)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textMuted)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(AppTheme.primaryPurple.opacity(0.1))
+                        .cornerRadius(3)
+                }
+                
+                if let model = device?.model, !model.isEmpty {
+                    Text(model)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textSecondary)
+                }
+                
+                Spacer()
+                
+                // Note indicator / toggle
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if expandedNoteTag == tag {
+                            expandedNoteTag = nil
+                        } else {
+                            expandedNoteTag = tag
+                        }
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: perDeviceNotes[tag]?.isEmpty == false ? "note.text" : "note.text.badge.plus")
+                            .font(.system(size: 11))
+                        if let note = perDeviceNotes[tag], !note.isEmpty {
+                            Text(note)
+                                .font(.system(size: 9))
+                                .lineLimit(1)
+                                .frame(maxWidth: 100)
+                        }
+                    }
+                    .foregroundColor(perDeviceNotes[tag]?.isEmpty == false ? AppTheme.accentOrange : AppTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            
+            // Expanded note field
+            if expandedNoteTag == tag {
+                HStack(spacing: 8) {
+                    TextField("Add note for \(tag)...", text: Binding(
+                        get: { perDeviceNotes[tag] ?? "" },
+                        set: { perDeviceNotes[tag] = $0 }
+                    ))
+                    .darkTextField()
+                    .font(.system(size: 11))
+                    
+                    Button(action: { expandedNoteTag = nil }) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(AppTheme.statusAvailable)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+            }
+        }
+        .background(AppTheme.backgroundDark)
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(AppTheme.surfaceBorder, lineWidth: 0.5)
+        )
     }
     
     // MARK: - Step 4: Complete (Session Summary)
@@ -965,12 +1070,16 @@ struct ScanCheckoutView: View {
         isProcessing = true
         Task {
             do {
+                // Filter out empty per-device notes
+                let activeDeviceNotes = perDeviceNotes.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+                
                 let result = try await APIService.shared.bulkCheckout(
                     assetTags: scannedTags,
                     locationId: selectedLocation?.id,
                     personId: selectedPerson?.id,
                     eventId: appState.currentEvent?.id,
-                    notes: checkoutNotes
+                    notes: checkoutNotes,
+                    perDeviceNotes: activeDeviceNotes
                 )
                 
                 let now = Date()
@@ -983,6 +1092,15 @@ struct ScanCheckoutView: View {
                     for tag in scannedTags {
                         let device = foundDevices.first { $0.assetTag == tag }
                         let wasNotFound = notFoundResult.contains(tag)
+                        let deviceNote = perDeviceNotes[tag]
+                        
+                        // Combine session note + per-device note
+                        var entryNote: String? = nil
+                        if wasNotFound {
+                            entryNote = "Device not found in system"
+                        } else if let dn = deviceNote, !dn.isEmpty {
+                            entryNote = dn
+                        }
                         
                         entries.append(ScanSessionEntry(
                             assetTag: tag,
@@ -991,7 +1109,7 @@ struct ScanCheckoutView: View {
                             model: device?.model,
                             location: selectedLocation?.name,
                             assignedTo: selectedPerson?.name,
-                            notes: wasNotFound ? "Device not found in system" : nil,
+                            notes: entryNote,
                             timestamp: now
                         ))
                     }
@@ -1092,6 +1210,8 @@ struct ScanCheckoutView: View {
         newPersonName = ""
         newPersonRole = ""
         checkoutNotes = ""
+        perDeviceNotes = [:]
+        expandedNoteTag = nil
         sessionLog = nil
     }
 }

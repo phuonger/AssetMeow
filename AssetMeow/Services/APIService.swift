@@ -212,18 +212,20 @@ class APIService {
     }
     
     // MARK: - Bulk Operations
-    func bulkCheckout(assetTags: [String], locationId: Int?, personId: Int?, eventId: Int?, notes: String = "") async throws -> BulkResult {
+    func bulkCheckout(assetTags: [String], locationId: Int?, personId: Int?, eventId: Int?, notes: String = "", perDeviceNotes: [String: String] = [:]) async throws -> BulkResult {
         var body: [String: Any] = ["asset_tags": assetTags, "notes": notes]
         if let locationId = locationId { body["location_id"] = locationId }
         if let personId = personId { body["person_id"] = personId }
         if let eventId = eventId { body["event_id"] = eventId }
+        if !perDeviceNotes.isEmpty { body["per_device_notes"] = perDeviceNotes }
         return try await request("devices/bulk-checkout", method: "POST", body: body)
     }
     
-    func bulkCheckin(assetTags: [String], locationId: Int?, assignedLocationId: Int? = nil, notes: String = "") async throws -> BulkResult {
+    func bulkCheckin(assetTags: [String], locationId: Int?, assignedLocationId: Int? = nil, notes: String = "", perDeviceNotes: [String: String] = [:]) async throws -> BulkResult {
         var body: [String: Any] = ["asset_tags": assetTags, "notes": notes]
         if let locationId = locationId { body["location_id"] = locationId }
         if let assignedLocationId = assignedLocationId { body["assigned_location_id"] = assignedLocationId }
+        if !perDeviceNotes.isEmpty { body["per_device_notes"] = perDeviceNotes }
         return try await request("devices/bulk-checkin", method: "POST", body: body)
     }
     

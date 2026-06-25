@@ -559,12 +559,15 @@ struct CheckInView: View {
                 
                 // Notes
                 HStack(spacing: 8) {
-                    Text("Notes:")
+                    Text("Session Note:")
                         .font(AppTheme.captionFont)
                         .foregroundColor(AppTheme.textSecondary)
-                    TextField("Optional check-in notes...", text: $notes)
+                    TextField("Applies to all devices in this session...", text: $notes)
                         .darkTextField()
                         .frame(width: 300)
+                    Text("(or add per-device notes below)")
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textMuted)
                 }
                 
                 // Category/Model breakdown summary
@@ -576,14 +579,17 @@ struct CheckInView: View {
             
             // Table header
             HStack(spacing: 0) {
+                Color.clear.frame(width: 20) // Flag column
                 Text("Asset Tag")
-                    .frame(width: 140, alignment: .leading)
+                    .frame(width: 130, alignment: .leading)
                 Text("Category / Model")
-                    .frame(width: 180, alignment: .leading)
-                Text("Current Location")
                     .frame(width: 160, alignment: .leading)
+                Text("Current Location")
+                    .frame(width: 140, alignment: .leading)
                 Text("Assigned Location (Check-In To)")
-                    .frame(minWidth: 200, alignment: .leading)
+                    .frame(minWidth: 160, alignment: .leading)
+                Text("Note")
+                    .frame(width: 40, alignment: .center)
                 Spacer()
             }
             .font(.system(size: 11, weight: .semibold))
@@ -591,6 +597,34 @@ struct CheckInView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .background(AppTheme.backgroundDark.opacity(0.5))
+            
+            // Never-checked-out warning banner
+            if previewDevices.contains(where: { $0.wasNeverCheckedOut }) {
+                let flaggedCount = previewDevices.filter({ $0.wasNeverCheckedOut }).count
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppTheme.accentOrange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(flaggedCount) device(s) were never checked out")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(AppTheme.accentOrange)
+                        Text("These devices still show as \"Available\" — they may have been handed out without scanning. Add a note to explain.")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.textSecondary)
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                .background(AppTheme.accentOrange.opacity(0.08))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(AppTheme.accentOrange.opacity(0.3), lineWidth: 1)
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+            }
             
             // Device list
             ScrollView {
@@ -937,7 +971,8 @@ struct CheckInView: View {
                 currentLocationName: device.locationName ?? "Unknown",
                 assignedLocation: assignedLoc,
                 assignedLocationName: device.assignedLocationName ?? "Not Set",
-                deviceId: device.id
+                deviceId: device.id,
+                deviceStatus: device.status
             ))
         }
         
@@ -973,12 +1008,21 @@ struct CheckInView: View {
                 
                 for (assignedLocId, items) in groups {
                     let tags = items.map { $0.assetTag }
+                    let sessionNote = notes.isEmpty ? "" : notes
+                    // Build per-device notes dict for this group
+                    var groupDeviceNotes: [String: String] = [:]
+                    for item in items {
+                        if !item.deviceNote.isEmpty {
+                            groupDeviceNotes[item.assetTag] = item.deviceNote
+                        }
+                    }
                     // For check-in: current location = assigned location (device goes home)
                     let result = try await APIService.shared.bulkCheckin(
                         assetTags: tags,
                         locationId: assignedLocId,
                         assignedLocationId: assignedLocId,
-                        notes: notes
+                        notes: sessionNote,
+                        perDeviceNotes: groupDeviceNotes
                     )
                     
                     if result.success == true {
@@ -988,6 +1032,21 @@ struct CheckInView: View {
                         for item in items {
                             let wasNotFound = notFoundResult.contains(item.assetTag)
                             if !wasNotFound { totalCheckedIn += 1 }
+                            
+                            // Build note string: combine session note + per-device note + flag
+                            var noteComponents: [String] = []
+                            if item.wasNeverCheckedOut {
+                                noteComponents.append("[Never checked out]")
+                            }
+                            if !item.deviceNote.isEmpty {
+                                noteComponents.append(item.deviceNote)
+                            }
+                            if wasNotFound {
+                                noteComponents = ["Device not found in system"]
+                            } else if noteComponents.isEmpty {
+                                noteComponents.append("Checked in to \(item.assignedLocation?.name ?? item.assignedLocationName)")
+                            }
+                            
                             allEntries.append(ScanSessionEntry(
                                 assetTag: item.assetTag,
                                 status: wasNotFound ? .notFound : .success,
@@ -995,7 +1054,7 @@ struct CheckInView: View {
                                 model: item.model,
                                 location: item.assignedLocation?.name ?? item.assignedLocationName,
                                 assignedTo: nil,
-                                notes: wasNotFound ? "Device not found in system" : "Checked in to \(item.assignedLocation?.name ?? item.assignedLocationName)",
+                                notes: noteComponents.joined(separator: " — "),
                                 timestamp: now
                             ))
                         }
@@ -1152,6 +1211,13 @@ struct CheckInPreviewItem: Identifiable {
     var assignedLocation: Location?  // Editable: where it will be checked in to
     var assignedLocationName: String // Display name (fallback if no Location object)
     var deviceId: Int?
+    var deviceStatus: String?        // Status from DB - detect "never checked out"
+    var deviceNote: String = ""      // Per-device note
+    
+    var wasNeverCheckedOut: Bool {
+        guard let status = deviceStatus?.lowercased() else { return false }
+        return status == "available" || status == "in stock"
+    }
 }
 
 // MARK: - Preview Row View
@@ -1163,128 +1229,190 @@ struct CheckInPreviewRow: View {
     @State private var showLocationPicker = false
     @State private var newLocationName = ""
     @State private var showNewLocation = false
+    @State private var showNoteField = false
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Asset Tag
-            CopyableAssetTag(assetTag: item.assetTag)
-                .frame(width: 140, alignment: .leading)
-            
-            // Category / Model
-            VStack(alignment: .leading, spacing: 1) {
-                if let category = item.category {
-                    Text(category)
-                        .font(.system(size: 11))
-                        .foregroundColor(AppTheme.textSecondary)
-                }
-                if let model = item.model {
-                    Text(model)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                // Never-checked-out flag
+                if item.wasNeverCheckedOut {
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(AppTheme.textMuted)
-                        .lineLimit(1)
-                }
-            }
-            .frame(width: 180, alignment: .leading)
-            
-            // Current Location (read-only)
-            Text(item.currentLocationName)
-                .font(.system(size: 11))
-                .foregroundColor(AppTheme.textMuted)
-                .frame(width: 160, alignment: .leading)
-            
-            // Assigned Location (editable)
-            HStack(spacing: 6) {
-                if showLocationPicker {
-                    Picker("", selection: Binding(
-                        get: { item.assignedLocation },
-                        set: { newLoc in
-                            item.assignedLocation = newLoc
-                            item.assignedLocationName = newLoc?.name ?? item.assignedLocationName
-                            showLocationPicker = false
-                        }
-                    )) {
-                        Text("-- Select --").tag(nil as Location?)
-                        ForEach(locations, id: \.id) { loc in
-                            Text(loc.name).tag(Optional(loc))
-                        }
-                    }
-                    .frame(width: 160)
-                    
-                    Button(action: { showNewLocation.toggle() }) {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.primaryPurpleLight)
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: { showLocationPicker = false }) {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.textMuted)
-                    }
-                    .buttonStyle(.plain)
+                        .foregroundColor(AppTheme.accentOrange)
+                        .frame(width: 20)
+                        .help("This device was never checked out")
                 } else {
-                    Text(item.assignedLocation?.name ?? item.assignedLocationName)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(AppTheme.statusAvailable)
-                    
-                    Button(action: { showLocationPicker = true }) {
-                        Image(systemName: "pencil.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.primaryPurpleLight)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Change assigned location for this device")
+                    Color.clear.frame(width: 20)
                 }
+                
+                // Asset Tag
+                CopyableAssetTag(assetTag: item.assetTag)
+                    .frame(width: 130, alignment: .leading)
+                
+                // Category / Model
+                VStack(alignment: .leading, spacing: 1) {
+                    if let category = item.category {
+                        Text(category)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppTheme.textSecondary)
+                    }
+                    if let model = item.model {
+                        Text(model)
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.textMuted)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: 160, alignment: .leading)
+                
+                // Current Location (read-only)
+                Text(item.currentLocationName)
+                    .font(.system(size: 11))
+                    .foregroundColor(AppTheme.textMuted)
+                    .frame(width: 140, alignment: .leading)
+                
+                // Assigned Location (editable)
+                HStack(spacing: 6) {
+                    if showLocationPicker {
+                        Picker("", selection: Binding(
+                            get: { item.assignedLocation },
+                            set: { newLoc in
+                                item.assignedLocation = newLoc
+                                item.assignedLocationName = newLoc?.name ?? item.assignedLocationName
+                                showLocationPicker = false
+                            }
+                        )) {
+                            Text("-- Select --").tag(nil as Location?)
+                            ForEach(locations, id: \.id) { loc in
+                                Text(loc.name).tag(Optional(loc))
+                            }
+                        }
+                        .frame(width: 140)
+                        
+                        Button(action: { showNewLocation.toggle() }) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.primaryPurpleLight)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Button(action: { showLocationPicker = false }) {
+                            Image(systemName: "xmark.circle")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.textMuted)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(item.assignedLocation?.name ?? item.assignedLocationName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(AppTheme.statusAvailable)
+                        
+                        Button(action: { showLocationPicker = true }) {
+                            Image(systemName: "pencil.circle")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.primaryPurpleLight)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Change assigned location for this device")
+                    }
+                }
+                .frame(minWidth: 160, alignment: .leading)
+                
+                // Per-device note toggle
+                Button(action: { showNoteField.toggle() }) {
+                    HStack(spacing: 2) {
+                        Image(systemName: item.deviceNote.isEmpty ? "note.text.badge.plus" : "note.text")
+                            .font(.system(size: 12))
+                        if !item.deviceNote.isEmpty {
+                            Circle()
+                                .fill(AppTheme.primaryPurpleLight)
+                                .frame(width: 5, height: 5)
+                        }
+                    }
+                    .foregroundColor(item.deviceNote.isEmpty ? AppTheme.textMuted : AppTheme.primaryPurpleLight)
+                }
+                .buttonStyle(.plain)
+                .help(item.deviceNote.isEmpty ? "Add a note for this device" : "Edit device note")
                 
                 Spacer()
             }
-            .frame(minWidth: 200, alignment: .leading)
+            
+            // Per-device note field (expanded)
+            if showNoteField {
+                HStack(spacing: 8) {
+                    if item.wasNeverCheckedOut {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.accentOrange)
+                        Text("Never checked out —")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(AppTheme.accentOrange)
+                    } else {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                    TextField(item.wasNeverCheckedOut ? "e.g. Handed to Adam but forgot to scan out" : "Add a note for this device...", text: $item.deviceNote)
+                        .darkTextField()
+                        .font(.system(size: 11))
+                }
+                .padding(.leading, 20)
+                .padding(.trailing, 8)
+                .padding(.vertical, 4)
+                .background(item.wasNeverCheckedOut ? AppTheme.accentOrange.opacity(0.05) : AppTheme.backgroundDark.opacity(0.3))
+            }
+            
+            // New location inline
+            if showNewLocation {
+                HStack(spacing: 8) {
+                    TextField("New location", text: $newLocationName)
+                        .darkTextField()
+                        .frame(width: 160)
+                    Button(action: {
+                        Task {
+                            if let loc = await appState.createLocation(name: newLocationName) {
+                                let matched = appState.locations.first(where: { $0.id == loc.id }) ?? loc
+                                item.assignedLocation = matched
+                                item.assignedLocationName = matched.name
+                                newLocationName = ""
+                                showNewLocation = false
+                                showLocationPicker = false
+                            }
+                        }
+                    }) {
+                        Text("Create")
+                            .font(AppTheme.captionFont)
+                            .foregroundColor(AppTheme.primaryPurpleLight)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(newLocationName.isEmpty)
+                    Button(action: { showNewLocation = false }) {
+                        Text("Cancel")
+                            .font(AppTheme.captionFont)
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.leading, 20)
+                .padding(8)
+                .background(AppTheme.backgroundDark)
+                .cornerRadius(6)
+            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(AppTheme.surfaceDefault.opacity(0.3))
+        .background(
+            item.wasNeverCheckedOut
+                ? AppTheme.accentOrange.opacity(0.06)
+                : AppTheme.surfaceDefault.opacity(0.3)
+        )
         .cornerRadius(4)
         .overlay(
-            Group {
-                if showNewLocation {
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 8) {
-                            TextField("New location", text: $newLocationName)
-                                .darkTextField()
-                                .frame(width: 160)
-                            Button(action: {
-                                Task {
-                                    if let loc = await appState.createLocation(name: newLocationName) {
-                                        let matched = appState.locations.first(where: { $0.id == loc.id }) ?? loc
-                                        item.assignedLocation = matched
-                                        item.assignedLocationName = matched.name
-                                        newLocationName = ""
-                                        showNewLocation = false
-                                        showLocationPicker = false
-                                    }
-                                }
-                            }) {
-                                Text("Create")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.primaryPurpleLight)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(newLocationName.isEmpty)
-                            Button(action: { showNewLocation = false }) {
-                                Text("Cancel")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.textMuted)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(8)
-                        .background(AppTheme.backgroundDark)
-                        .cornerRadius(6)
-                    }
-                }
-            }
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(
+                    item.wasNeverCheckedOut ? AppTheme.accentOrange.opacity(0.3) : Color.clear,
+                    lineWidth: 1
+                )
         )
     }
 }
