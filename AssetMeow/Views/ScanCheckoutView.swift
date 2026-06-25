@@ -35,10 +35,14 @@ struct ScanCheckoutView: View {
     @State private var isProcessing = false
     @State private var resultMessage = ""
     @State private var showResult = false
+    @State private var validationError = ""
     
     // Session log
     @State private var sessionLog: ScanSessionLog?
     @State private var sessionStartTime = Date()
+    
+    // Track skipped tags for session log
+    @State private var skippedNotFoundTags: [String] = []
     
     @FocusState private var scanFieldFocused: Bool
     
@@ -209,6 +213,42 @@ struct ScanCheckoutView: View {
                     .font(AppTheme.bodyFont)
                     .foregroundColor(AppTheme.textSecondary)
                 Spacer()
+            } else if !validationError.isEmpty {
+                // Show error with retry option
+                Spacer()
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(AppTheme.statusMissing.opacity(0.15))
+                            .frame(width: 60, height: 60)
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(AppTheme.statusMissing)
+                    }
+                    Text("Validation Error")
+                        .font(AppTheme.headingFont)
+                        .foregroundColor(AppTheme.textPrimary)
+                    Text(validationError)
+                        .font(AppTheme.bodyFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                Spacer()
+                HStack {
+                    Button(action: { step = .scan; validationError = "" }) {
+                        Text("Back to Scan")
+                            .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Button(action: { validationError = ""; retryValidation() }) {
+                        Text("Retry")
+                            .primaryButton()
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(20)
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
@@ -247,58 +287,120 @@ struct ScanCheckoutView: View {
                             .cardStyle()
                         }
                         
-                        // Not found devices
+                        // Not found devices — warning section
                         if !notFoundTags.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .foregroundColor(AppTheme.statusCheckedOut)
-                                    Text("\(notFoundTags.count) devices NOT in system")
+                                    Text("\(notFoundTags.count) tag(s) NOT found in system")
                                         .font(AppTheme.subheadingFont)
                                         .foregroundColor(AppTheme.textPrimary)
                                     Spacer()
-                                    Text("Fill in details to create them")
-                                        .font(AppTheme.captionFont)
-                                        .foregroundColor(AppTheme.textMuted)
                                 }
                                 
+                                Text("These tags don't match any device in inventory. You can remove them, create them as new devices, or skip them and continue with the valid devices only.")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textSecondary)
+                                    .padding(.bottom, 4)
+                                
                                 VStack(spacing: 4) {
-                                    ForEach($newDeviceEntries, id: \.assetTag) { $entry in
+                                    ForEach(Array(notFoundTags.enumerated()), id: \.offset) { index, tag in
                                         HStack(spacing: 8) {
-                                            CopyableAssetTag(assetTag: entry.assetTag)
-                                                .frame(width: 130, alignment: .leading)
-                                            TextField("Category", text: $entry.category)
-                                                .darkTextField()
-                                                .frame(width: 100)
-                                            TextField("Model", text: $entry.model)
-                                                .darkTextField()
-                                                .frame(width: 120)
-                                            TextField("SKU", text: $entry.sku)
-                                                .darkTextField()
-                                                .frame(width: 120)
+                                            CopyableAssetTag(assetTag: tag)
+                                                .frame(width: 160, alignment: .leading)
+                                            
+                                            Text("Not Found")
+                                                .font(.system(size: 10, weight: .medium))
+                                                .foregroundColor(AppTheme.statusMissing)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(AppTheme.statusMissing.opacity(0.1))
+                                                .cornerRadius(4)
+                                            
+                                            Spacer()
+                                            
+                                            // Remove button
                                             Button(action: {
-                                                newDeviceEntries.removeAll { $0.assetTag == entry.assetTag }
+                                                notFoundTags.remove(at: index)
+                                                newDeviceEntries.removeAll { $0.assetTag == tag }
                                             }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(AppTheme.statusMissing.opacity(0.7))
+                                                HStack(spacing: 2) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                    Text("Remove")
+                                                }
+                                                .font(.system(size: 10))
+                                                .foregroundColor(AppTheme.statusMissing)
                                             }
                                             .buttonStyle(.plain)
-                                            Spacer()
                                         }
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(AppTheme.statusMissing.opacity(0.05))
+                                        .cornerRadius(6)
                                     }
                                 }
                                 
-                                // Quick fill
-                                HStack(spacing: 12) {
-                                    Text("Quick fill:")
+                                // Option to create new devices
+                                if !newDeviceEntries.isEmpty {
+                                    Divider()
+                                        .background(AppTheme.surfaceBorder)
+                                    
+                                    Text("Fill in details to create these as new devices:")
                                         .font(AppTheme.captionFont)
                                         .foregroundColor(AppTheme.textMuted)
-                                    QuickFillField(label: "Category", entries: $newDeviceEntries, keyPath: \.category)
-                                    QuickFillField(label: "Model", entries: $newDeviceEntries, keyPath: \.model)
-                                    QuickFillField(label: "SKU", entries: $newDeviceEntries, keyPath: \.sku)
+                                    
+                                    VStack(spacing: 4) {
+                                        ForEach($newDeviceEntries, id: \.assetTag) { $entry in
+                                            HStack(spacing: 8) {
+                                                CopyableAssetTag(assetTag: entry.assetTag)
+                                                    .frame(width: 130, alignment: .leading)
+                                                TextField("Category", text: $entry.category)
+                                                    .darkTextField()
+                                                    .frame(width: 100)
+                                                TextField("Model", text: $entry.model)
+                                                    .darkTextField()
+                                                    .frame(width: 120)
+                                                TextField("SKU", text: $entry.sku)
+                                                    .darkTextField()
+                                                    .frame(width: 120)
+                                                Button(action: {
+                                                    newDeviceEntries.removeAll { $0.assetTag == entry.assetTag }
+                                                }) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(AppTheme.statusMissing.opacity(0.7))
+                                                }
+                                                .buttonStyle(.plain)
+                                                Spacer()
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Quick fill
+                                    HStack(spacing: 12) {
+                                        Text("Quick fill:")
+                                            .font(AppTheme.captionFont)
+                                            .foregroundColor(AppTheme.textMuted)
+                                        QuickFillField(label: "Category", entries: $newDeviceEntries, keyPath: \.category)
+                                        QuickFillField(label: "Model", entries: $newDeviceEntries, keyPath: \.model)
+                                        QuickFillField(label: "SKU", entries: $newDeviceEntries, keyPath: \.sku)
+                                    }
                                 }
                             }
                             .cardStyle()
+                        }
+                        
+                        // Empty state - all tags were not found and none are valid
+                        if foundDevices.isEmpty && notFoundTags.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(AppTheme.textMuted)
+                                Text("No devices to process")
+                                    .font(AppTheme.bodyFont)
+                                    .foregroundColor(AppTheme.textSecondary)
+                            }
+                            .padding(.vertical, 40)
                         }
                     }
                     .padding(20)
@@ -306,44 +408,55 @@ struct ScanCheckoutView: View {
                 
                 // Bottom buttons
                 HStack {
-                    Button(action: resetAll) {
-                        Text("Cancel")
+                    Button(action: {
+                        step = .scan
+                        validationError = ""
+                    }) {
+                        Text("Back to Scan")
                             .secondaryButton()
                     }
                     .buttonStyle(.plain)
                     
                     Spacer()
                     
-                    if !notFoundTags.isEmpty && !newDeviceEntries.isEmpty {
-                        Button(action: {
-                            newDeviceEntries = []
-                            scannedTags = foundDevices.map { $0.assetTag }
-                            if scannedTags.isEmpty {
-                                resultMessage = "No existing devices to check out."
-                                showResult = true
-                            } else {
-                                step = .assign
+                    // Skip unknown and continue with valid devices
+                    if !notFoundTags.isEmpty && !foundDevices.isEmpty {
+                        Button(action: skipUnknownAndProceed) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 10))
+                                Text("Skip Unknown (\(notFoundTags.count))")
                             }
-                        }) {
-                            Text("Skip Unknown")
-                                .secondaryButton()
+                            .secondaryButton()
                         }
                         .buttonStyle(.plain)
                     }
                     
-                    Button(action: {
-                        if !newDeviceEntries.isEmpty {
-                            createNewDevicesAndProceed()
-                        } else {
+                    // Create new devices and proceed (if user filled in details)
+                    if !newDeviceEntries.isEmpty {
+                        Button(action: createNewDevicesAndProceed) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 10))
+                                Text("Create & Continue")
+                            }
+                            .primaryButton()
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isProcessing)
+                    }
+                    
+                    // Continue with found devices only (when no not-found tags or all removed)
+                    if notFoundTags.isEmpty && !foundDevices.isEmpty {
+                        Button(action: {
                             scannedTags = foundDevices.map { $0.assetTag }
                             step = .assign
+                        }) {
+                            Text("Continue to Assignment")
+                                .primaryButton()
                         }
-                    }) {
-                        Text("Continue to Assignment")
-                            .primaryButton()
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(foundDevices.isEmpty && newDeviceEntries.isEmpty)
                 }
                 .padding(20)
             }
@@ -362,6 +475,19 @@ struct ScanCheckoutView: View {
                     Text("Choose where these devices are going")
                         .font(AppTheme.captionFont)
                         .foregroundColor(AppTheme.textSecondary)
+                    
+                    // Show skipped warning if any
+                    if !skippedNotFoundTags.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppTheme.accentOrange)
+                            Text("\(skippedNotFoundTags.count) unknown tag(s) were skipped and will be logged")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppTheme.accentOrange)
+                        }
+                        .padding(.top, 2)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -587,13 +713,13 @@ struct ScanCheckoutView: View {
                         .glowCardStyle()
                         .padding(.horizontal, 40)
                         
-                        // Not found list
+                        // Not found / skipped list
                         if !log.notFoundEntries.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .foregroundColor(AppTheme.statusMissing)
-                                    Text("\(log.notFoundEntries.count) Devices Not Found")
+                                    Text("\(log.notFoundEntries.count) Devices Not Found / Skipped")
                                         .font(AppTheme.subheadingFont)
                                         .foregroundColor(AppTheme.textPrimary)
                                     Spacer()
@@ -620,7 +746,7 @@ struct ScanCheckoutView: View {
                                         HStack {
                                             CopyableAssetTag(assetTag: entry.assetTag)
                                             Spacer()
-                                            Text("Not Found")
+                                            Text(entry.notes ?? "Not Found")
                                                 .font(AppTheme.captionFont)
                                                 .foregroundColor(AppTheme.textMuted)
                                         }
@@ -753,8 +879,14 @@ struct ScanCheckoutView: View {
         
         sessionStartTime = Date()
         isProcessing = true
+        validationError = ""
         step = .review
         
+        retryValidation()
+    }
+    
+    func retryValidation() {
+        isProcessing = true
         Task {
             do {
                 let response = try await APIService.shared.validateDevices(assetTags: scannedTags)
@@ -765,16 +897,34 @@ struct ScanCheckoutView: View {
                     NewDeviceEntry(assetTag: tag, category: "", model: "", sku: "")
                 }
                 
+                // If ALL devices are found, skip review and go straight to assign
                 if notFoundTags.isEmpty && !foundDevices.isEmpty {
                     scannedTags = foundDevices.map { $0.assetTag }
                     step = .assign
                 }
+                // Otherwise stay on review step — user sees found + not-found
+                
             } catch {
-                resultMessage = "Error validating devices: \(error.localizedDescription)"
-                showResult = true
-                step = .scan
+                validationError = "Could not validate devices: \(error.localizedDescription)"
+                ToastManager.shared.error("Validation Failed", detail: error.localizedDescription)
             }
             isProcessing = false
+        }
+    }
+    
+    func skipUnknownAndProceed() {
+        // Save the not-found tags for session logging
+        skippedNotFoundTags = notFoundTags
+        
+        // Proceed with only the found devices
+        scannedTags = foundDevices.map { $0.assetTag }
+        newDeviceEntries = []
+        
+        if scannedTags.isEmpty {
+            ToastManager.shared.warning("No Valid Devices", detail: "All scanned tags were unknown. Nothing to check out.")
+        } else {
+            ToastManager.shared.info("Skipped \(skippedNotFoundTags.count) Unknown", detail: "Proceeding with \(scannedTags.count) valid device(s).")
+            step = .assign
         }
     }
     
@@ -797,6 +947,7 @@ struct ScanCheckoutView: View {
                     scannedTags = foundDevices.map { $0.assetTag } + createdTags
                     ToastManager.shared.success("Devices Created", detail: "\(createdTags.count) device(s) written to database.")
                     newDeviceEntries = []
+                    notFoundTags = []
                     step = .assign
                 } else {
                     let errorMsg = result.error ?? "Unknown"
@@ -848,20 +999,18 @@ struct ScanCheckoutView: View {
                         ))
                     }
                     
-                    // Add any not-found tags from the original scan that were skipped
-                    for tag in notFoundTags {
-                        if !scannedTags.contains(tag) {
-                            entries.append(ScanSessionEntry(
-                                assetTag: tag,
-                                status: .notFound,
-                                category: nil,
-                                model: nil,
-                                location: nil,
-                                assignedTo: nil,
-                                notes: "Skipped - not in system",
-                                timestamp: now
-                            ))
-                        }
+                    // Add skipped not-found tags to the session log
+                    for tag in skippedNotFoundTags {
+                        entries.append(ScanSessionEntry(
+                            assetTag: tag,
+                            status: .notFound,
+                            category: nil,
+                            model: nil,
+                            location: nil,
+                            assignedTo: nil,
+                            notes: "Skipped — not found in system (possible accidental scan)",
+                            timestamp: now
+                        ))
                     }
                 } else {
                     // Error case
@@ -874,6 +1023,19 @@ struct ScanCheckoutView: View {
                             location: nil,
                             assignedTo: nil,
                             notes: result.error ?? "Unknown error",
+                            timestamp: now
+                        ))
+                    }
+                    // Still log skipped tags
+                    for tag in skippedNotFoundTags {
+                        entries.append(ScanSessionEntry(
+                            assetTag: tag,
+                            status: .notFound,
+                            category: nil,
+                            model: nil,
+                            location: nil,
+                            assignedTo: nil,
+                            notes: "Skipped — not found in system",
                             timestamp: now
                         ))
                     }
@@ -917,6 +1079,7 @@ struct ScanCheckoutView: View {
         foundDevices = []
         notFoundTags = []
         newDeviceEntries = []
+        skippedNotFoundTags = []
         selectedLocation = nil
         selectedPerson = nil
         showNewLocation = false
@@ -925,6 +1088,7 @@ struct ScanCheckoutView: View {
         newPersonName = ""
         newPersonRole = ""
         checkoutNotes = ""
+        validationError = ""
         sessionLog = nil
         scanFieldFocused = true
     }
