@@ -268,7 +268,7 @@ struct CheckInView: View {
                 }
                 Spacer()
                 HStack {
-                    Button(action: { step = .scan; validationError = "" }) {
+                    Button(action: { backToScan() }) {
                         Text("Back to Scan")
                             .secondaryButton()
                     }
@@ -396,10 +396,7 @@ struct CheckInView: View {
                 
                 // Bottom buttons
                 HStack {
-                    Button(action: {
-                        step = .scan
-                        validationError = ""
-                    }) {
+                    Button(action: { backToScan() }) {
                         Text("Back to Scan")
                             .secondaryButton()
                     }
@@ -1055,22 +1052,27 @@ struct CheckInView: View {
         }
     }
     
-    func resetForm() {
+    func backToScan() {
         step = .scan
-        scannedTags.removeAll()
         scanText = ""
-        notes = ""
+        scannedTags.removeAll()
         validatedDevices.removeAll()
         notFoundTags.removeAll()
         skippedNotFoundTags.removeAll()
         validationError = ""
         previewDevices.removeAll()
+        isProcessing = false
+        scanFieldFocused = true
+    }
+    
+    func resetForm() {
+        backToScan()
+        notes = ""
         showOverrideAll = false
         overrideAllLocation = nil
         newOverrideLocationName = ""
         showNewOverrideLocation = false
         sessionLog = nil
-        scanFieldFocused = true
     }
 }
 

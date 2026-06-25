@@ -236,7 +236,7 @@ struct ScanCheckoutView: View {
                 }
                 Spacer()
                 HStack {
-                    Button(action: { step = .scan; validationError = "" }) {
+                    Button(action: { backToScan() }) {
                         Text("Back to Scan")
                             .secondaryButton()
                     }
@@ -408,10 +408,7 @@ struct ScanCheckoutView: View {
                 
                 // Bottom buttons
                 HStack {
-                    Button(action: {
-                        step = .scan
-                        validationError = ""
-                    }) {
+                    Button(action: { backToScan() }) {
                         Text("Back to Scan")
                             .secondaryButton()
                     }
@@ -1072,7 +1069,7 @@ struct ScanCheckoutView: View {
         }
     }
     
-    func resetAll() {
+    func backToScan() {
         step = .scan
         scanText = ""
         scannedTags = []
@@ -1080,6 +1077,13 @@ struct ScanCheckoutView: View {
         notFoundTags = []
         newDeviceEntries = []
         skippedNotFoundTags = []
+        validationError = ""
+        isProcessing = false
+        scanFieldFocused = true
+    }
+    
+    func resetAll() {
+        backToScan()
         selectedLocation = nil
         selectedPerson = nil
         showNewLocation = false
@@ -1088,9 +1092,7 @@ struct ScanCheckoutView: View {
         newPersonName = ""
         newPersonRole = ""
         checkoutNotes = ""
-        validationError = ""
         sessionLog = nil
-        scanFieldFocused = true
     }
 }
 
