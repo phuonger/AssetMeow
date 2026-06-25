@@ -14,6 +14,7 @@ struct InventoryListView: View {
     @State private var filterSku = ""
     @State private var filterCurrentLocation: Location?
     @State private var filterAssignedLocation: Location?
+    @State private var filterUnassigned = false
     @State private var selectedAssetTag: String?
     @State private var editingDevice: Device?
     
@@ -403,7 +404,26 @@ struct InventoryListView: View {
                         }
                     }
                     .frame(width: 150)
-                    .onChange(of: filterAssignedLocation) { _ in loadDevices() }
+                    .onChange(of: filterAssignedLocation) { _ in
+                        if filterAssignedLocation != nil { filterUnassigned = false }
+                        loadDevices()
+                    }
+                    
+                    // Unassigned toggle
+                    Button(action: {
+                        filterUnassigned.toggle()
+                        if filterUnassigned { filterAssignedLocation = nil }
+                        loadDevices()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: filterUnassigned ? "checkmark.square.fill" : "square")
+                                .font(.system(size: 12))
+                            Text("Unassigned")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundColor(filterUnassigned ? AppTheme.statusCheckedOut : AppTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
                     
                     Spacer()
                     
@@ -517,10 +537,17 @@ struct InventoryListView: View {
             }
         }
         .onAppear {
+            applyFilterIntent()
             loadDevices()
         }
         .onChange(of: appState.currentEvent) { _ in
             loadDevices()
+        }
+        .onReceive(appState.$inventoryFilterIntent) { intent in
+            if intent != nil {
+                applyFilterIntent()
+                loadDevices()
+            }
         }
         .sheet(item: $editingDevice) { device in
             DeviceEditSheet(device: device) {
@@ -645,6 +672,40 @@ struct InventoryListView: View {
     }
     
     // MARK: - Actions
+    func applyFilterIntent() {
+        guard let intent = appState.inventoryFilterIntent else { return }
+        
+        // Reset all filters first
+        filterStatus = nil
+        filterCategory = ""
+        filterModel = ""
+        filterSku = ""
+        filterCurrentLocation = nil
+        filterAssignedLocation = nil
+        filterUnassigned = false
+        searchText = ""
+        
+        // Apply intent filters
+        if let status = intent.status {
+            filterStatus = status
+        }
+        if let category = intent.category, !category.isEmpty {
+            filterCategory = category
+        }
+        if intent.isUnassigned {
+            filterUnassigned = true
+        } else if let locName = intent.assignedLocationName, !locName.isEmpty {
+            if locName == "Unassigned" {
+                filterUnassigned = true
+            } else {
+                filterAssignedLocation = appState.locations.first { $0.name.lowercased() == locName.lowercased() }
+            }
+        }
+        
+        // Clear the intent after applying
+        appState.inventoryFilterIntent = nil
+    }
+    
     func loadDevices() {
         isLoading = true
         errorMessage = nil
@@ -659,6 +720,7 @@ struct InventoryListView: View {
                     sku: filterSku.isEmpty ? nil : filterSku,
                     locationId: filterCurrentLocation?.id,
                     assignedLocationId: filterAssignedLocation?.id,
+                    unassigned: filterUnassigned,
                     limit: 1000
                 )
                 await MainActor.run {

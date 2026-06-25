@@ -43,6 +43,12 @@ struct DashboardView: View {
             
             Spacer()
             
+            // Hint text
+            Text("Click any number to view details in Inventory")
+                .font(.system(size: 11))
+                .foregroundColor(AppTheme.textMuted)
+                .padding(.trailing, 12)
+            
             // Refresh button
             Button(action: { loadDashboard() }) {
                 HStack(spacing: 6) {
@@ -79,63 +85,81 @@ struct DashboardView: View {
     // MARK: - Summary Cards
     private var summaryCardsView: some View {
         HStack(spacing: 16) {
-            summaryCard(
+            clickableSummaryCard(
                 title: "Total Devices",
                 value: "\(devices.count)",
                 icon: "cpu",
-                color: AppTheme.primaryPurple
+                color: AppTheme.primaryPurple,
+                filter: InventoryFilterIntent()  // No filter = show all
             )
-            summaryCard(
+            clickableSummaryCard(
                 title: "Checked In",
                 value: "\(checkedInCount)",
                 icon: "arrow.down.to.line",
-                color: AppTheme.statusAvailable
+                color: AppTheme.statusAvailable,
+                filter: InventoryFilterIntent(status: .available)
             )
-            summaryCard(
+            clickableSummaryCard(
                 title: "Checked Out",
                 value: "\(checkedOutCount)",
                 icon: "arrow.up.forward",
-                color: AppTheme.statusCheckedOut
+                color: AppTheme.statusCheckedOut,
+                filter: InventoryFilterIntent(status: .checkedOut)
             )
-            summaryCard(
+            clickableSummaryCard(
                 title: "Missing",
                 value: "\(missingCount)",
                 icon: "exclamationmark.triangle",
-                color: AppTheme.statusMissing
+                color: AppTheme.statusMissing,
+                filter: InventoryFilterIntent(status: .missing)
             )
         }
     }
     
-    private func summaryCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(color)
-                Spacer()
-            }
-            
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(value)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(AppTheme.textPrimary)
-                    Text(title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(AppTheme.textSecondary)
+    private func clickableSummaryCard(title: String, value: String, icon: String, color: Color, filter: InventoryFilterIntent) -> some View {
+        Button(action: { navigateToInventory(with: filter) }) {
+            VStack(spacing: 12) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(color)
+                    Spacer()
+                    Image(systemName: "arrow.right.circle")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppTheme.textMuted.opacity(0.5))
                 }
-                Spacer()
+                
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(value)
+                            .font(.system(size: 28, weight: .bold, design: .rounded))
+                            .foregroundColor(AppTheme.textPrimary)
+                        Text(title)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                    }
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(AppTheme.surfaceDark)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppTheme.surfaceBorder, lineWidth: 1)
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(AppTheme.surfaceDark)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppTheme.surfaceBorder, lineWidth: 1)
-                )
-        )
     }
     
     // MARK: - Location Breakdown Table
@@ -218,73 +242,134 @@ struct DashboardView: View {
     
     private func locationGroupView(_ group: LocationGroup) -> some View {
         VStack(spacing: 0) {
-            // Location header row
-            HStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(AppTheme.primaryPurple)
-                    Text(group.locationName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(AppTheme.textPrimary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                Text("\(group.totalCheckedIn)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(AppTheme.statusAvailable)
-                    .frame(width: 120, alignment: .center)
-                
-                Text("\(group.totalCheckedOut)")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(AppTheme.statusCheckedOut)
-                    .frame(width: 120, alignment: .center)
-                
-                Text("\(group.totalDevices)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(AppTheme.textPrimary)
-                    .frame(width: 100, alignment: .center)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(AppTheme.surfaceLight.opacity(0.3))
-            
-            // Category rows
-            ForEach(group.categories, id: \.categoryName) { cat in
+            // Location header row — clickable
+            Button(action: {
+                navigateToInventory(with: InventoryFilterIntent(assignedLocationName: group.locationName))
+            }) {
                 HStack(spacing: 0) {
                     HStack(spacing: 8) {
-                        Text("")
-                            .frame(width: 14) // indent
-                        Image(systemName: "tag")
-                            .font(.system(size: 11))
-                            .foregroundColor(AppTheme.textMuted)
-                        Text(cat.categoryName)
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.textSecondary)
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppTheme.primaryPurple)
+                        Text(group.locationName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(AppTheme.textPrimary)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(AppTheme.textMuted.opacity(0.5))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    Text("\(cat.checkedIn)")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.textSecondary)
-                        .frame(width: 120, alignment: .center)
+                    // Checked In — clickable
+                    clickableCount(
+                        value: group.totalCheckedIn,
+                        color: AppTheme.statusAvailable,
+                        weight: .semibold,
+                        filter: InventoryFilterIntent(status: .available, assignedLocationName: group.locationName)
+                    )
+                    .frame(width: 120, alignment: .center)
                     
-                    Text("\(cat.checkedOut)")
-                        .font(.system(size: 12))
-                        .foregroundColor(AppTheme.textSecondary)
-                        .frame(width: 120, alignment: .center)
+                    // Checked Out — clickable
+                    clickableCount(
+                        value: group.totalCheckedOut,
+                        color: AppTheme.statusCheckedOut,
+                        weight: .semibold,
+                        filter: InventoryFilterIntent(status: .checkedOut, assignedLocationName: group.locationName)
+                    )
+                    .frame(width: 120, alignment: .center)
                     
-                    Text("\(cat.total)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(AppTheme.textSecondary)
-                        .frame(width: 100, alignment: .center)
+                    // Total — clickable (shows all for this location)
+                    clickableCount(
+                        value: group.totalDevices,
+                        color: AppTheme.textPrimary,
+                        weight: .bold,
+                        filter: InventoryFilterIntent(assignedLocationName: group.locationName)
+                    )
+                    .frame(width: 100, alignment: .center)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 7)
+                .padding(.vertical, 10)
+                .background(AppTheme.surfaceLight.opacity(0.3))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+            
+            // Category rows — clickable
+            ForEach(group.categories, id: \.categoryName) { cat in
+                Button(action: {
+                    navigateToInventory(with: InventoryFilterIntent(
+                        category: cat.categoryName,
+                        assignedLocationName: group.locationName
+                    ))
+                }) {
+                    HStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Text("")
+                                .frame(width: 14) // indent
+                            Image(systemName: "tag")
+                                .font(.system(size: 11))
+                                .foregroundColor(AppTheme.textMuted)
+                            Text(cat.categoryName)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        // Checked In for this category
+                        clickableCount(
+                            value: cat.checkedIn,
+                            color: AppTheme.textSecondary,
+                            weight: .regular,
+                            filter: InventoryFilterIntent(status: .available, category: cat.categoryName, assignedLocationName: group.locationName)
+                        )
+                        .frame(width: 120, alignment: .center)
+                        
+                        // Checked Out for this category
+                        clickableCount(
+                            value: cat.checkedOut,
+                            color: AppTheme.textSecondary,
+                            weight: .regular,
+                            filter: InventoryFilterIntent(status: .checkedOut, category: cat.categoryName, assignedLocationName: group.locationName)
+                        )
+                        .frame(width: 120, alignment: .center)
+                        
+                        // Total for this category
+                        clickableCount(
+                            value: cat.total,
+                            color: AppTheme.textSecondary,
+                            weight: .medium,
+                            filter: InventoryFilterIntent(category: cat.categoryName, assignedLocationName: group.locationName)
+                        )
+                        .frame(width: 100, alignment: .center)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
             
             Divider()
                 .background(AppTheme.surfaceBorder.opacity(0.3))
+        }
+    }
+    
+    private func clickableCount(value: Int, color: Color, weight: Font.Weight, filter: InventoryFilterIntent) -> some View {
+        Button(action: { navigateToInventory(with: filter) }) {
+            Text("\(value)")
+                .font(.system(size: 13, weight: weight))
+                .foregroundColor(color)
+                .underline(color: color.opacity(0.3))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
     
@@ -295,24 +380,40 @@ struct DashboardView: View {
                 .foregroundColor(AppTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            Text("\(checkedInCount)")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(AppTheme.statusAvailable)
-                .frame(width: 120, alignment: .center)
+            clickableCount(
+                value: checkedInCount,
+                color: AppTheme.statusAvailable,
+                weight: .bold,
+                filter: InventoryFilterIntent(status: .available)
+            )
+            .frame(width: 120, alignment: .center)
             
-            Text("\(checkedOutCount)")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(AppTheme.statusCheckedOut)
-                .frame(width: 120, alignment: .center)
+            clickableCount(
+                value: checkedOutCount,
+                color: AppTheme.statusCheckedOut,
+                weight: .bold,
+                filter: InventoryFilterIntent(status: .checkedOut)
+            )
+            .frame(width: 120, alignment: .center)
             
-            Text("\(devices.count)")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(AppTheme.textPrimary)
-                .frame(width: 100, alignment: .center)
+            clickableCount(
+                value: devices.count,
+                color: AppTheme.textPrimary,
+                weight: .bold,
+                filter: InventoryFilterIntent()
+            )
+            .frame(width: 100, alignment: .center)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(AppTheme.primaryPurple.opacity(0.1))
+    }
+    
+    // MARK: - Navigation
+    
+    private func navigateToInventory(with filter: InventoryFilterIntent) {
+        appState.inventoryFilterIntent = filter
+        appState.navigateToTab = "Inventory"
     }
     
     // MARK: - Data Models

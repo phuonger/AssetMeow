@@ -163,7 +163,7 @@ class APIService {
     }
     
     // MARK: - Devices
-    func getDevices(eventId: Int? = nil, status: String? = nil, category: String? = nil, model: String? = nil, sku: String? = nil, locationId: Int? = nil, assignedLocationId: Int? = nil, limit: Int = 1000, offset: Int = 0) async throws -> DevicesResponse {
+    func getDevices(eventId: Int? = nil, status: String? = nil, category: String? = nil, model: String? = nil, sku: String? = nil, locationId: Int? = nil, assignedLocationId: Int? = nil, unassigned: Bool = false, limit: Int = 1000, offset: Int = 0) async throws -> DevicesResponse {
         var params: [String: String] = ["limit": "\(limit)", "offset": "\(offset)"]
         if let eventId = eventId { params["event_id"] = "\(eventId)" }
         if let status = status { params["status"] = status }
@@ -172,6 +172,7 @@ class APIService {
         if let sku = sku { params["sku"] = sku }
         if let locationId = locationId { params["location_id"] = "\(locationId)" }
         if let assignedLocationId = assignedLocationId { params["assigned_location_id"] = "\(assignedLocationId)" }
+        if unassigned { params["unassigned"] = "1" }
         return try await request("devices", queryParams: params)
     }
     

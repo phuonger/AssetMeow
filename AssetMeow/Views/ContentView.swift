@@ -38,6 +38,13 @@ struct ContentView: View {
     
     var body: some View {
         mainContent
+            .onChange(of: appState.navigateToTab) { newTab in
+                if let tabName = newTab,
+                   let tab = SidebarItem(rawValue: tabName) {
+                    selectedTab = tab
+                    appState.navigateToTab = nil
+                }
+            }
     }
     
     var mainContent: some View {

@@ -12,6 +12,10 @@ class AppState: ObservableObject {
     @Published var statusMessage = ""
     @Published var isLoading = false
     
+    // Navigation intent — used to navigate from Dashboard to Inventory with filters
+    @Published var inventoryFilterIntent: InventoryFilterIntent?
+    @Published var navigateToTab: String?  // Tab name to navigate to
+    
     // Auth state
     @Published var isLoggedIn = false
     @Published var currentUser: AppUser?
@@ -287,5 +291,23 @@ class AppState: ObservableObject {
         }
         isLoading = false
         isNetworkActive = false
+    }
+}
+
+// MARK: - Navigation Intent for Dashboard → Inventory
+struct InventoryFilterIntent {
+    var status: DeviceStatus?
+    var category: String?
+    var assignedLocationName: String?
+    var currentLocationName: String?
+    var isUnassigned: Bool = false
+    
+    var description: String {
+        var parts: [String] = []
+        if let status = status { parts.append("Status: \(status.rawValue)") }
+        if let cat = category { parts.append("Category: \(cat)") }
+        if let loc = assignedLocationName { parts.append("Location: \(loc)") }
+        if isUnassigned { parts.append("Unassigned") }
+        return parts.joined(separator: ", ")
     }
 }
