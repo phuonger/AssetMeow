@@ -191,35 +191,57 @@ jobs:
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
     - name: Generate appcast entry
+      env:
+        SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
       run: |
         ZIP_SIZE=$(stat -f%z build/AssetMeow.zip)
         VERSION=${{ steps.version.outputs.VERSION }}
         TAG=${GITHUB_REF#refs/tags/}
         DATE=$(date -R)
         
+        # Extract the actual CFBundleVersion (build number) from the built app
+        BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_EXPORT_PATH/Contents/Info.plist")
+        echo "Marketing version: $VERSION, Build number: $BUILD_NUMBER"
+        
+        # Generate EdDSA signature for the ZIP
+        ED_SIGNATURE=""
+        if [ -n "$SPARKLE_ED_PRIVATE_KEY" ]; then
+          # Download Sparkle's sign_update tool
+          SPARKLE_TOOLS="build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          if [ -f "$SPARKLE_TOOLS/sign_update" ]; then
+            ED_SIGNATURE=$(echo "$SPARKLE_ED_PRIVATE_KEY" | "$SPARKLE_TOOLS/sign_update" build/AssetMeow.zip -f - | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
+          fi
+        fi
+        
+        # Build the enclosure attributes
+        ENCLOSURE_ATTRS="sparkle:version=\"${BUILD_NUMBER}\""
+        ENCLOSURE_ATTRS="$ENCLOSURE_ATTRS sparkle:shortVersionString=\"${VERSION}\""
+        ENCLOSURE_ATTRS="$ENCLOSURE_ATTRS length=\"${ZIP_SIZE}\""
+        ENCLOSURE_ATTRS="$ENCLOSURE_ATTRS type=\"application/octet-stream\""
+        if [ -n "$ED_SIGNATURE" ]; then
+          ENCLOSURE_ATTRS="$ENCLOSURE_ATTRS sparkle:edSignature=\"${ED_SIGNATURE}\""
+        fi
+        
         cat > build/appcast.xml << EOF
-        <?xml version="1.0" encoding="utf-8"?>
-        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-          <channel>
-            <title>AssetMeow Updates</title>
-            <link>https://raw.githubusercontent.com/phuonger/AssetMeow/main/appcast.xml</link>
-            <description>Most recent changes with links to updates.</description>
-            <language>en</language>
-            <item>
-              <title>Version ${VERSION}</title>
-              <pubDate>${DATE}</pubDate>
-              <sparkle:version>${VERSION}</sparkle:version>
-              <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-              <enclosure url="https://github.com/phuonger/AssetMeow/releases/download/${TAG}/AssetMeow.zip"
-                         sparkle:version="${VERSION}"
-                         sparkle:shortVersionString="${VERSION}"
-                         length="${ZIP_SIZE}"
-                         type="application/octet-stream" />
-            </item>
-          </channel>
-        </rss>
-        EOF
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>AssetMeow Updates</title>
+    <link>https://raw.githubusercontent.com/phuonger/AssetMeow/main/appcast.xml</link>
+    <description>Most recent changes with links to updates.</description>
+    <language>en</language>
+    <item>
+      <title>Version ${VERSION}</title>
+      <pubDate>${DATE}</pubDate>
+      <sparkle:version>${BUILD_NUMBER}</sparkle:version>
+      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/phuonger/AssetMeow/releases/download/${TAG}/AssetMeow.zip"
+                 ${ENCLOSURE_ATTRS} />
+    </item>
+  </channel>
+</rss>
+EOF
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
