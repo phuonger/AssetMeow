@@ -30,6 +30,7 @@
 			A1000022 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022; };
 			A1000023 /* CopyableField.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000023; };
 			A1000024 /* ToastNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000024; };
+			A1000025 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000025; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +57,7 @@
 			B1000022 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		B1000023 /* CopyableField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyableField.swift; sourceTree = "<group>"; };
 		B1000024 /* ToastNotification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastNotification.swift; sourceTree = "<group>"; };
+		B1000025 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 			B1000020 /* AssetMeow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AssetMeow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -152,6 +154,7 @@
 				B1000019 /* CSVExporter.swift */,
 				B1000023 /* CopyableField.swift */,
 				B1000024 /* ToastNotification.swift */,
+				B1000025 /* FlowLayout.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -280,6 +283,7 @@
 					A1000022 /* DashboardView.swift in Sources */,
 					A1000023 /* CopyableField.swift in Sources */,
 					A1000024 /* ToastNotification.swift in Sources */,
+					A1000025 /* FlowLayout.swift in Sources */,
 				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

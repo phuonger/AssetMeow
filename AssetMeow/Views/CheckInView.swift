@@ -566,6 +566,9 @@ struct CheckInView: View {
                         .darkTextField()
                         .frame(width: 300)
                 }
+                
+                // Category/Model breakdown summary
+                categorySummaryView
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
@@ -679,6 +682,12 @@ struct CheckInView: View {
                             statCard("Not Found", "\(log.notFoundCount)", AppTheme.statusMissing)
                         }
                         .padding(.horizontal, 40)
+                        
+                        // Category breakdown
+                        if !previewDevices.isEmpty {
+                            categorySummaryView
+                                .padding(.horizontal, 40)
+                        }
                         
                         // Session details
                         VStack(alignment: .leading, spacing: 10) {
@@ -1050,6 +1059,63 @@ struct CheckInView: View {
             }
             isProcessing = false
         }
+    }
+    
+    // MARK: - Category Summary View
+    var categorySummaryView: some View {
+        let grouped = Dictionary(grouping: previewDevices) { item -> String in
+            let cat = item.category ?? "Unknown"
+            let mdl = item.model ?? ""
+            return mdl.isEmpty ? cat : "\(cat) — \(mdl)"
+        }
+        let sorted = grouped.sorted { $0.value.count > $1.value.count }
+        
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(AppTheme.primaryPurpleLight)
+                Text("Scan Summary")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(AppTheme.textPrimary)
+                Text("\(previewDevices.count) total")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(AppTheme.primaryPurpleLight)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(AppTheme.primaryPurpleLight.opacity(0.1))
+                    .cornerRadius(4)
+            }
+            
+            // Category breakdown chips
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(sorted, id: \.key) { key, devices in
+                    HStack(spacing: 4) {
+                        Text("\(devices.count)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(AppTheme.primaryPurpleLight)
+                        Text(key)
+                            .font(.system(size: 11))
+                            .foregroundColor(AppTheme.textSecondary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.surfaceDefault)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(AppTheme.surfaceBorder, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .padding(12)
+        .background(AppTheme.backgroundDark.opacity(0.3))
+        .cornerRadius(AppTheme.cornerRadius)
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.surfaceBorder, lineWidth: 1)
+        )
     }
     
     func backToScan() {
