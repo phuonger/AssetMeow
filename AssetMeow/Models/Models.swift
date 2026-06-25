@@ -489,6 +489,46 @@ struct ValidateResponse: Codable {
         case foundCount = "found_count"
         case notFoundCount = "not_found_count"
     }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try? container.decodeIfPresent(Bool.self, forKey: .success)
+        found = try? container.decodeIfPresent([ValidatedDevice].self, forKey: .found)
+        foundCount = try? container.decodeIfPresent(Int.self, forKey: .foundCount)
+        notFoundCount = try? container.decodeIfPresent(Int.self, forKey: .notFoundCount)
+        
+        // Handle not_found array where items might be strings OR integers (due to JSON_NUMERIC_CHECK)
+        if let stringArray = try? container.decodeIfPresent([String].self, forKey: .notFound) {
+            notFound = stringArray
+        } else if let mixedArray = try? container.decodeIfPresent([FlexibleString].self, forKey: .notFound) {
+            notFound = mixedArray.map { $0.value }
+        } else {
+            notFound = nil
+        }
+    }
+}
+
+// Helper to decode values that might be String or Int from JSON
+struct FlexibleString: Codable {
+    let value: String
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let str = try? container.decode(String.self) {
+            value = str
+        } else if let num = try? container.decode(Int.self) {
+            value = String(num)
+        } else if let dbl = try? container.decode(Double.self) {
+            value = String(dbl)
+        } else {
+            value = ""
+        }
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+    }
 }
 
 struct ValidatedDevice: Codable, Identifiable, Hashable {
@@ -509,6 +549,28 @@ struct ValidatedDevice: Codable, Identifiable, Hashable {
         case locationName = "location_name"
         case assignedLocationName = "assigned_location_name"
         case assignedToName = "assigned_to_name"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? container.decodeIfPresent(Int.self, forKey: .id)
+        
+        // asset_tag might come as String or Int (due to JSON_NUMERIC_CHECK)
+        if let str = try? container.decode(String.self, forKey: .assetTag) {
+            assetTag = str
+        } else if let num = try? container.decode(Int.self, forKey: .assetTag) {
+            assetTag = String(num)
+        } else {
+            assetTag = ""
+        }
+        
+        category = try? container.decodeIfPresent(String.self, forKey: .category)
+        model = try? container.decodeIfPresent(String.self, forKey: .model)
+        sku = try? container.decodeIfPresent(String.self, forKey: .sku)
+        status = try? container.decodeIfPresent(String.self, forKey: .status)
+        locationName = try? container.decodeIfPresent(String.self, forKey: .locationName)
+        assignedLocationName = try? container.decodeIfPresent(String.self, forKey: .assignedLocationName)
+        assignedToName = try? container.decodeIfPresent(String.self, forKey: .assignedToName)
     }
 }
 
