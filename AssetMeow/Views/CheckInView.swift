@@ -583,7 +583,9 @@ struct CheckInView: View {
                 Text("Asset Tag")
                     .frame(width: 130, alignment: .leading)
                 Text("Category / Model")
-                    .frame(width: 160, alignment: .leading)
+                    .frame(width: 140, alignment: .leading)
+                Text("SKU")
+                    .frame(width: 100, alignment: .leading)
                 Text("Current Location")
                     .frame(width: 140, alignment: .leading)
                 Text("Assigned Location (Check-In To)")
@@ -968,6 +970,7 @@ struct CheckInView: View {
                 assetTag: device.assetTag,
                 category: device.category,
                 model: device.model,
+                sku: device.sku,
                 currentLocationName: device.locationName ?? "Unknown",
                 assignedLocation: assignedLoc,
                 assignedLocationName: device.assignedLocationName ?? "Not Set",
@@ -1207,6 +1210,7 @@ struct CheckInPreviewItem: Identifiable {
     var assetTag: String
     var category: String?
     var model: String?
+    var sku: String?
     var currentLocationName: String  // Read-only: where device is now
     var assignedLocation: Location?  // Editable: where it will be checked in to
     var assignedLocationName: String // Display name (fallback if no Location object)
@@ -1263,7 +1267,14 @@ struct CheckInPreviewRow: View {
                             .lineLimit(1)
                     }
                 }
-                .frame(width: 160, alignment: .leading)
+                .frame(width: 140, alignment: .leading)
+                
+                // SKU
+                Text(item.sku ?? "—")
+                    .font(.system(size: 11))
+                    .foregroundColor(AppTheme.textMuted)
+                    .lineLimit(1)
+                    .frame(width: 100, alignment: .leading)
                 
                 // Current Location (read-only)
                 Text(item.currentLocationName)

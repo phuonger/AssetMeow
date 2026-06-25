@@ -270,11 +270,13 @@ struct ScanCheckoutView: View {
                                         HStack {
                                             CopyableAssetTag(assetTag: device.assetTag)
                                                 .frame(width: 140, alignment: .leading)
-                                            CopyableText(text: device.category ?? "—")
+                                            CopyableText(text: device.category ?? "\u{2014}")
                                                 .frame(width: 80, alignment: .leading)
-                                            CopyableText(text: device.model ?? "—")
+                                            CopyableText(text: device.model ?? "\u{2014}")
                                                 .frame(width: 100, alignment: .leading)
-                                            Text(device.status ?? "—")
+                                            CopyableText(text: device.sku ?? "\u{2014}")
+                                                .frame(width: 90, alignment: .leading)
+                                            Text(device.status ?? "\u{2014}")
                                                 .font(AppTheme.captionFont)
                                                 .foregroundColor(AppTheme.statusColor(for: device.status ?? ""))
                                             Spacer()
@@ -698,6 +700,16 @@ struct ScanCheckoutView: View {
                     Text(model)
                         .font(.system(size: 10))
                         .foregroundColor(AppTheme.textSecondary)
+                }
+                
+                if let sku = device?.sku, !sku.isEmpty {
+                    Text(sku)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textMuted)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(AppTheme.accentCyan.opacity(0.1))
+                        .cornerRadius(3)
                 }
                 
                 Spacer()
