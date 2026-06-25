@@ -37,14 +37,117 @@ struct ContentView: View {
     }
     
     var body: some View {
-        mainContent
-            .onChange(of: appState.navigateToTab) { newTab in
-                if let tabName = newTab,
-                   let tab = SidebarItem(rawValue: tabName) {
-                    selectedTab = tab
-                    appState.navigateToTab = nil
-                }
+        VStack(spacing: 0) {
+            // Station mode session bar
+            if appState.isStationMode && appState.stationSessionActive {
+                stationSessionBar
             }
+            
+            mainContent
+        }
+        .onChange(of: appState.navigateToTab) { newTab in
+            if let tabName = newTab,
+               let tab = SidebarItem(rawValue: tabName) {
+                selectedTab = tab
+                appState.navigateToTab = nil
+            }
+        }
+        // Reset inactivity timer on any interaction in station mode
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if appState.isStationMode && appState.stationSessionActive {
+                appState.resetStationTimer()
+            }
+        }
+    }
+    
+    // MARK: - Station Session Bar
+    private var stationSessionBar: some View {
+        HStack(spacing: 12) {
+            // Station mode indicator
+            HStack(spacing: 6) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(AppTheme.accentCyan)
+                Text("Station Mode")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(AppTheme.accentCyan)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(AppTheme.accentCyan.opacity(0.1))
+            .cornerRadius(4)
+            
+            // Current user
+            HStack(spacing: 4) {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 10))
+                Text(appState.currentUser?.displayName ?? appState.currentUser?.username ?? "User")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(AppTheme.textPrimary)
+            
+            Spacer()
+            
+            // Session timer
+            HStack(spacing: 4) {
+                Image(systemName: "timer")
+                    .font(.system(size: 10))
+                Text(formatTime(appState.stationTimeRemaining))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+            }
+            .foregroundColor(appState.stationTimeRemaining <= 60 ? AppTheme.statusMissing : AppTheme.textSecondary)
+            
+            // Extend time button
+            Button(action: { appState.resetStationTimer() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 10))
+                    Text("Extend")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundColor(AppTheme.primaryPurpleLight)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(AppTheme.primaryPurple.opacity(0.1))
+                .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+            
+            // End Session button
+            Button(action: endStationSession) {
+                HStack(spacing: 4) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 10))
+                    Text("End Session")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(AppTheme.statusMissing.opacity(0.8))
+                .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(AppTheme.backgroundDark)
+        .overlay(
+            Divider().background(AppTheme.surfaceBorder.opacity(0.5)),
+            alignment: .bottom
+        )
+    }
+    
+    private func formatTime(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+    
+    private func endStationSession() {
+        Task {
+            await appState.endStationSession()
+        }
     }
     
     var mainContent: some View {
@@ -101,6 +204,29 @@ struct ContentView: View {
     private var topToolbar: some View {
         HStack(spacing: 12) {
             Spacer()
+            
+            // Station Mode button (only show when NOT already in station mode)
+            if !appState.isStationMode {
+                Button(action: { appState.enterStationMode() }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "desktopcomputer")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Station Mode")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(AppTheme.accentCyan)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.accentCyan.opacity(0.1))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(AppTheme.accentCyan.opacity(0.3), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Enter Station Mode for badge-based scanning")
+            }
             
             // Event picker
             HStack(spacing: 8) {

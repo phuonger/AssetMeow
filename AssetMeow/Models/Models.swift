@@ -714,6 +714,7 @@ struct AppUser: Codable, Identifiable, Hashable {
     var role: String
     var displayName: String?
     var isActive: Bool
+    var badgeId: String?
     var createdAt: String?
     var lastLogin: String?
     
@@ -721,16 +722,18 @@ struct AppUser: Codable, Identifiable, Hashable {
         case id, username, role
         case displayName = "display_name"
         case isActive = "is_active"
+        case badgeId = "badge_id"
         case createdAt = "created_at"
         case lastLogin = "last_login"
     }
     
-    init(id: Int?, username: String, role: String = "user", displayName: String? = nil, isActive: Bool = true, createdAt: String? = nil, lastLogin: String? = nil) {
+    init(id: Int?, username: String, role: String = "user", displayName: String? = nil, isActive: Bool = true, badgeId: String? = nil, createdAt: String? = nil, lastLogin: String? = nil) {
         self.id = id
         self.username = username
         self.role = role
         self.displayName = displayName
         self.isActive = isActive
+        self.badgeId = badgeId
         self.createdAt = createdAt
         self.lastLogin = lastLogin
     }
@@ -757,6 +760,7 @@ struct AppUser: Codable, Identifiable, Hashable {
         } else {
             isActive = true
         }
+        badgeId = try? container.decodeIfPresent(String.self, forKey: .badgeId)
         createdAt = try? container.decodeIfPresent(String.self, forKey: .createdAt)
         lastLogin = try? container.decodeIfPresent(String.self, forKey: .lastLogin)
     }

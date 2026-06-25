@@ -68,7 +68,16 @@ struct AssetMeowApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if appState.isLoggedIn {
+                if appState.isStationMode {
+                    // Station mode: show badge login or main content
+                    if appState.isLoggedIn && appState.stationSessionActive {
+                        ContentView()
+                            .environmentObject(appState)
+                    } else {
+                        KioskLoginView()
+                            .environmentObject(appState)
+                    }
+                } else if appState.isLoggedIn {
                     ContentView()
                         .environmentObject(appState)
                 } else {

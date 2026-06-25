@@ -134,6 +134,18 @@ class APIService {
         return try await request("auth/me")
     }
     
+    func badgeLogin(badgeId: String) async throws -> LoginResponse {
+        let body: [String: Any] = ["badge_id": badgeId]
+        let response: LoginResponse = try await request("auth/badge-login", method: "POST", body: body)
+        
+        if let token = response.token, let user = response.user {
+            self.authToken = token
+            self.currentUser = user
+        }
+        
+        return response
+    }
+    
     func changePassword(currentPassword: String, newPassword: String) async throws -> ChangePasswordResponse {
         let body: [String: Any] = ["current_password": currentPassword, "new_password": newPassword]
         return try await request("auth/change-password", method: "POST", body: body)
@@ -144,8 +156,11 @@ class APIService {
         return try await request("users")
     }
     
-    func createUser(username: String, password: String, role: String) async throws -> GenericResponse {
-        let body: [String: Any] = ["username": username, "password": password, "role": role]
+    func createUser(username: String, password: String, role: String, badgeId: String? = nil) async throws -> GenericResponse {
+        var body: [String: Any] = ["username": username, "password": password, "role": role]
+        if let badgeId = badgeId {
+            body["badge_id"] = badgeId
+        }
         return try await request("users", method: "POST", body: body)
     }
     

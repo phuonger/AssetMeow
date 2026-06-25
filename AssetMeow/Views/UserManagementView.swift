@@ -15,6 +15,7 @@ struct UserManagementView: View {
     @State private var newUsername = ""
     @State private var newPassword = ""
     @State private var newDisplayName = ""
+    @State private var newBadgeId = ""
     @State private var newRole = "user"
     
     // Change password form
@@ -171,6 +172,22 @@ struct UserManagementView: View {
             }
             
             VStack(alignment: .leading, spacing: 6) {
+                Text("Badge ID (for Station Mode login)")
+                    .font(AppTheme.captionFont)
+                    .foregroundColor(AppTheme.textSecondary)
+                HStack(spacing: 8) {
+                    TextField("Scan or enter badge ID", text: $newBadgeId)
+                        .darkTextField()
+                    Image(systemName: "wave.3.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(AppTheme.textMuted)
+                }
+                Text("Leave empty if not using badge login")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppTheme.textMuted)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Role")
                     .font(AppTheme.captionFont)
                     .foregroundColor(AppTheme.textSecondary)
@@ -234,6 +251,22 @@ struct UserManagementView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 6) {
+                    Text("Badge ID (for Station Mode login)")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                    HStack(spacing: 8) {
+                        TextField("Scan or enter badge ID", text: $newBadgeId)
+                            .darkTextField()
+                        Image(systemName: "wave.3.right")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                    Text("Leave empty to remove badge login")
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textMuted)
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
                     Text("New Password (leave empty to keep current)")
                         .font(AppTheme.captionFont)
                         .foregroundColor(AppTheme.textSecondary)
@@ -274,6 +307,7 @@ struct UserManagementView: View {
         .onAppear {
             if let user = selectedUser {
                 newDisplayName = user.displayName ?? ""
+                newBadgeId = user.badgeId ?? ""
                 newRole = user.role
             }
         }
@@ -363,7 +397,8 @@ struct UserManagementView: View {
                 let response = try await APIService.shared.createUser(
                     username: newUsername,
                     password: newPassword,
-                    role: newRole
+                    role: newRole,
+                    badgeId: newBadgeId.isEmpty ? nil : newBadgeId
                 )
                 await MainActor.run {
                     if response.success == true {
@@ -390,6 +425,8 @@ struct UserManagementView: View {
                 if !newDisplayName.isEmpty {
                     updates["display_name"] = newDisplayName
                 }
+                // Always send badge_id (empty string clears it)
+                updates["badge_id"] = newBadgeId.isEmpty ? "" : newBadgeId
                 if !newPassword.isEmpty {
                     updates["password"] = newPassword
                 }
@@ -445,6 +482,7 @@ struct UserManagementView: View {
         newUsername = ""
         newPassword = ""
         newDisplayName = ""
+        newBadgeId = ""
         newRole = "user"
         errorMessage = ""
     }

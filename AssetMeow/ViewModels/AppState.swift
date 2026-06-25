@@ -21,6 +21,12 @@ class AppState: ObservableObject {
     @Published var currentUser: AppUser?
     @Published var loginError: String?
     
+    // Station/Kiosk mode
+    @Published var isStationMode = false
+    @Published var stationSessionActive = false
+    @Published var stationTimeRemaining: Int = 300 // 5 minutes in seconds
+    private var stationTimer: Timer?
+    
     private let api = APIService.shared
     private let toast = ToastManager.shared
     
@@ -66,6 +72,106 @@ class AppState: ObservableObject {
         locations = []
         people = []
         isConnected = false
+        // If in station mode, keep station mode active but end session
+        if isStationMode {
+            stationSessionActive = false
+            stationTimer?.invalidate()
+            stationTimer = nil
+            stationTimeRemaining = 300
+        }
+    }
+    
+    // MARK: - Station/Kiosk Mode
+    
+    func enterStationMode() {
+        isStationMode = true
+        // Log out current user to show badge login screen
+        Task {
+            await api.logout()
+            isLoggedIn = false
+            currentUser = nil
+            stationSessionActive = false
+            stationTimeRemaining = 300
+        }
+    }
+    
+    func exitStationMode() {
+        isStationMode = false
+        stationSessionActive = false
+        stationTimer?.invalidate()
+        stationTimer = nil
+        stationTimeRemaining = 300
+        // Log out to show normal login
+        Task {
+            await api.logout()
+            isLoggedIn = false
+            currentUser = nil
+        }
+    }
+    
+    func badgeLogin(badgeId: String) async -> Bool {
+        isLoading = true
+        loginError = nil
+        
+        do {
+            let response = try await api.badgeLogin(badgeId: badgeId)
+            if response.success == true, let user = response.user {
+                isLoggedIn = true
+                currentUser = user
+                stationSessionActive = true
+                stationTimeRemaining = 300
+                startStationTimer()
+                await loadInitialData()
+                isLoading = false
+                return true
+            } else {
+                loginError = response.error ?? "Badge not recognized"
+                isLoading = false
+                return false
+            }
+        } catch let error as APIError {
+            switch error {
+            case .serverError(_, let msg):
+                loginError = msg
+            default:
+                loginError = error.localizedDescription
+            }
+            isLoading = false
+            return false
+        } catch {
+            loginError = error.localizedDescription
+            isLoading = false
+            return false
+        }
+    }
+    
+    func resetStationTimer() {
+        stationTimeRemaining = 300
+    }
+    
+    func endStationSession() async {
+        stationTimer?.invalidate()
+        stationTimer = nil
+        stationTimeRemaining = 300
+        stationSessionActive = false
+        await api.logout()
+        isLoggedIn = false
+        currentUser = nil
+    }
+    
+    private func startStationTimer() {
+        stationTimer?.invalidate()
+        stationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if self.stationTimeRemaining > 0 {
+                    self.stationTimeRemaining -= 1
+                } else {
+                    // Session expired
+                    await self.endStationSession()
+                }
+            }
+        }
     }
     
     func changePassword(current: String, new: String) async -> (Bool, String) {
