@@ -5,23 +5,28 @@ struct CheckInView: View {
     
     enum Step {
         case scan
-        case assign
+        case preview
         case complete
     }
     
     @State private var step: Step = .scan
     @State private var scanText = ""
     @State private var scannedTags: [String] = []
-    @State private var selectedLocation: Location?
-    @State private var selectedAssignedLocation: Location?
     @State private var notes = ""
-    @State private var newLocationName = ""
-    @State private var newAssignedLocationName = ""
-    @State private var showNewAssignedLocation = false
-    @State private var showNewLocation = false
     @State private var resultMessage = ""
     @State private var showResult = false
     @State private var isProcessing = false
+    @State private var isFetchingDevices = false
+    
+    // Preview data
+    @State private var previewDevices: [CheckInPreviewItem] = []
+    @State private var notFoundTags: [String] = []
+    
+    // Override all
+    @State private var showOverrideAll = false
+    @State private var overrideAllLocation: Location?
+    @State private var newOverrideLocationName = ""
+    @State private var showNewOverrideLocation = false
     
     // Session log
     @State private var sessionLog: ScanSessionLog?
@@ -52,7 +57,7 @@ struct CheckInView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
-                        stepBadge(2, "Location", active: step == .assign)
+                        stepBadge(2, "Preview", active: step == .preview)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
@@ -64,8 +69,8 @@ struct CheckInView: View {
                 switch step {
                 case .scan:
                     scanStepView
-                case .assign:
-                    assignmentStepView
+                case .preview:
+                    previewStepView
                 case .complete:
                     completeStepView
                 }
@@ -76,7 +81,7 @@ struct CheckInView: View {
     var stepDescription: String {
         switch step {
         case .scan: return "Scan devices being returned"
-        case .assign: return "Select return location"
+        case .preview: return "Review devices and confirm assigned locations"
         case .complete: return "Session complete — review results and download log"
         }
     }
@@ -201,173 +206,220 @@ struct CheckInView: View {
                     if scannedTags.isEmpty { processScannedInput() }
                     if !scannedTags.isEmpty {
                         sessionStartTime = Date()
-                        step = .assign
+                        fetchDevicesForPreview()
                     }
                 }) {
-                    Text("Submit\(scannedTags.count > 0 ? " (\(scannedTags.count) items)" : "")")
-                        .primaryButton()
+                    HStack(spacing: 6) {
+                        if isFetchingDevices {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.7)
+                        }
+                        Text("Submit\(scannedTags.count > 0 ? " (\(scannedTags.count) items)" : "")")
+                    }
+                    .primaryButton()
                 }
                 .buttonStyle(.plain)
-                .disabled(scanText.isEmpty && scannedTags.isEmpty)
+                .disabled((scanText.isEmpty && scannedTags.isEmpty) || isFetchingDevices)
                 .keyboardShortcut(.return, modifiers: [])
             }
             .padding(20)
         }
     }
     
-    // MARK: - Step 2: Assignment
-    var assignmentStepView: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Checking in \(scannedTags.count) devices")
-                        .font(AppTheme.headingFont)
-                        .foregroundColor(AppTheme.textPrimary)
-                    Text("Select where these devices are being returned to")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                
-                // Assigned Location (where device belongs)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Assigned Location")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    Text("Where the device is assigned / stored (home location)")
-                        .font(.system(size: 10))
-                        .foregroundColor(AppTheme.textMuted)
-                    HStack {
-                        Picker("", selection: $selectedAssignedLocation) {
-                            Text("-- Select --").tag(nil as Location?)
-                            ForEach(appState.locations, id: \.id) { loc in
-                                Text(loc.name).tag(Optional(loc))
-                            }
-                        }
-                        .frame(width: 220)
-                        .onChange(of: selectedAssignedLocation) { newVal in
-                            // Default Current Location to match Assigned Location
-                            if selectedLocation == nil {
-                                selectedLocation = newVal
-                            }
-                        }
-                        
-                        Button(action: { showNewAssignedLocation.toggle() }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                Text("New")
-                            }
+    // MARK: - Step 2: Preview / Confirmation
+    var previewStepView: some View {
+        VStack(spacing: 0) {
+            // Header info
+            VStack(spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Review Check-In")
+                            .font(AppTheme.headingFont)
+                            .foregroundColor(AppTheme.textPrimary)
+                        Text("Devices will be checked in to their Assigned Location. Override if needed.")
                             .font(AppTheme.captionFont)
-                            .foregroundColor(AppTheme.primaryPurpleLight)
-                        }
-                        .buttonStyle(.plain)
+                            .foregroundColor(AppTheme.textSecondary)
                     }
+                    Spacer()
                     
-                    if showNewAssignedLocation {
-                        HStack(spacing: 8) {
-                            TextField("New location name", text: $newAssignedLocationName)
-                                .darkTextField()
-                                .frame(width: 200)
-                            Button(action: {
-                                Task {
-                                    if let loc = await appState.createLocation(name: newAssignedLocationName) {
-                                        if let matched = appState.locations.first(where: { $0.id == loc.id }) {
-                                            selectedAssignedLocation = matched
-                                            if selectedLocation == nil { selectedLocation = matched }
-                                        } else {
-                                            selectedAssignedLocation = loc
-                                            if selectedLocation == nil { selectedLocation = loc }
-                                        }
-                                        newAssignedLocationName = ""
-                                        showNewAssignedLocation = false
-                                    }
-                                }
-                            }) {
-                                Text("Create")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.primaryPurpleLight)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(newAssignedLocationName.isEmpty)
+                    // Override All button
+                    Button(action: { showOverrideAll.toggle() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Override All")
                         }
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.accentOrange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.accentOrange.opacity(0.1))
+                        .cornerRadius(6)
                     }
+                    .buttonStyle(.plain)
                 }
                 
-                // Current Location (where device physically is now)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Current Location")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textSecondary)
-                    Text("Where the device physically is right now (usually same as Assigned)")
-                        .font(.system(size: 10))
-                        .foregroundColor(AppTheme.textMuted)
-                    HStack {
-                        Picker("", selection: $selectedLocation) {
-                            Text("-- Select --").tag(nil as Location?)
-                            ForEach(appState.locations, id: \.id) { loc in
-                                Text(loc.name).tag(Optional(loc))
-                            }
-                        }
-                        .frame(width: 220)
-                        
-                        Button(action: { showNewLocation.toggle() }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                Text("New")
-                            }
+                // Override All panel
+                if showOverrideAll {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Set Assigned Location for ALL devices:")
                             .font(AppTheme.captionFont)
-                            .foregroundColor(AppTheme.primaryPurpleLight)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    if showNewLocation {
+                            .foregroundColor(AppTheme.textSecondary)
                         HStack(spacing: 8) {
-                            TextField("New location name", text: $newLocationName)
-                                .darkTextField()
-                                .frame(width: 200)
-                            Button(action: {
-                                Task {
-                                    if let loc = await appState.createLocation(name: newLocationName) {
-                                        if let matched = appState.locations.first(where: { $0.id == loc.id }) {
-                                            selectedLocation = matched
-                                        } else {
-                                            selectedLocation = loc
-                                        }
-                                        newLocationName = ""
-                                        showNewLocation = false
-                                    }
+                            Picker("", selection: $overrideAllLocation) {
+                                Text("-- Select --").tag(nil as Location?)
+                                ForEach(appState.locations, id: \.id) { loc in
+                                    Text(loc.name).tag(Optional(loc))
                                 }
-                            }) {
-                                Text("Create")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.primaryPurpleLight)
+                            }
+                            .frame(width: 220)
+                            
+                            Button(action: { showNewOverrideLocation.toggle() }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "plus")
+                                    Text("New")
+                                }
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.primaryPurpleLight)
                             }
                             .buttonStyle(.plain)
-                            .disabled(newLocationName.isEmpty)
+                            
+                            Button(action: applyOverrideAll) {
+                                Text("Apply to All")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(AppTheme.accentOrange)
+                                    .cornerRadius(5)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(overrideAllLocation == nil)
+                        }
+                        
+                        if showNewOverrideLocation {
+                            HStack(spacing: 8) {
+                                TextField("New location name", text: $newOverrideLocationName)
+                                    .darkTextField()
+                                    .frame(width: 200)
+                                Button(action: {
+                                    Task {
+                                        if let loc = await appState.createLocation(name: newOverrideLocationName) {
+                                            if let matched = appState.locations.first(where: { $0.id == loc.id }) {
+                                                overrideAllLocation = matched
+                                            } else {
+                                                overrideAllLocation = loc
+                                            }
+                                            newOverrideLocationName = ""
+                                            showNewOverrideLocation = false
+                                        }
+                                    }
+                                }) {
+                                    Text("Create")
+                                        .font(AppTheme.captionFont)
+                                        .foregroundColor(AppTheme.primaryPurpleLight)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(newOverrideLocationName.isEmpty)
+                            }
                         }
                     }
+                    .padding(12)
+                    .background(AppTheme.accentOrange.opacity(0.05))
+                    .cornerRadius(AppTheme.cornerRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                            .stroke(AppTheme.accentOrange.opacity(0.2), lineWidth: 1)
+                    )
                 }
                 
                 // Notes
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Notes (optional)")
+                HStack(spacing: 8) {
+                    Text("Notes:")
                         .font(AppTheme.captionFont)
                         .foregroundColor(AppTheme.textSecondary)
-                    TextField("Return notes...", text: $notes)
+                    TextField("Optional check-in notes...", text: $notes)
                         .darkTextField()
-                        .frame(width: 350)
+                        .frame(width: 300)
                 }
             }
-            .glowCardStyle()
-            .padding(.horizontal, 40)
-            .padding(.top, 20)
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
             
-            Spacer()
+            // Not found warning
+            if !notFoundTags.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(AppTheme.statusMissing)
+                    Text("\(notFoundTags.count) device(s) not found in inventory:")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.statusMissing)
+                    Text(notFoundTags.joined(separator: ", "))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(AppTheme.textSecondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .background(AppTheme.statusMissing.opacity(0.08))
+            }
+            
+            // Table header
+            HStack(spacing: 0) {
+                Text("Asset Tag")
+                    .frame(width: 140, alignment: .leading)
+                Text("Category / Model")
+                    .frame(width: 180, alignment: .leading)
+                Text("Current Location")
+                    .frame(width: 160, alignment: .leading)
+                Text("Assigned Location (Check-In To)")
+                    .frame(minWidth: 200, alignment: .leading)
+                Spacer()
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(AppTheme.textMuted)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(AppTheme.backgroundDark.opacity(0.5))
+            
+            // Device list
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach($previewDevices) { $item in
+                        CheckInPreviewRow(item: $item, locations: appState.locations, appState: appState)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+            }
+            
+            // Summary bar
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(previewDevices.count) device(s) ready for check-in")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                    if !notFoundTags.isEmpty {
+                        Text("\(notFoundTags.count) not found (will be skipped)")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.statusMissing)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(AppTheme.surfaceDefault.opacity(0.3))
             
             // Bottom buttons
             HStack {
-                Button(action: { step = .scan }) {
+                Button(action: {
+                    step = .scan
+                    previewDevices.removeAll()
+                    notFoundTags.removeAll()
+                }) {
                     Text("Back")
                         .secondaryButton()
                 }
@@ -382,12 +434,12 @@ struct CheckInView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(0.7)
                         }
-                        Text("Check In \(scannedTags.count) Devices")
+                        Text("Confirm Check-In (\(previewDevices.count) Devices)")
                     }
                     .primaryButton()
                 }
                 .buttonStyle(.plain)
-                .disabled(isProcessing)
+                .disabled(isProcessing || previewDevices.isEmpty)
             }
             .padding(20)
         }
@@ -430,9 +482,6 @@ struct CheckInView: View {
                                 .font(AppTheme.subheadingFont)
                                 .foregroundColor(AppTheme.textPrimary)
                             
-                            if let loc = log.location {
-                                detailRow("Return Location", loc)
-                            }
                             if let event = log.event {
                                 detailRow("Event", event)
                             }
@@ -462,7 +511,7 @@ struct CheckInView: View {
                                         CSVExporter.exportNotFoundLog(
                                             log.notFoundEntries.map { $0.assetTag },
                                             sessionType: "Check In",
-                                            location: log.location,
+                                            location: nil,
                                             event: log.event
                                         )
                                     }) {
@@ -512,6 +561,11 @@ struct CheckInView: View {
                                         HStack {
                                             CopyableAssetTag(assetTag: entry.assetTag)
                                             Spacer()
+                                            if let loc = entry.location {
+                                                Text("→ \(loc)")
+                                                    .font(AppTheme.captionFont)
+                                                    .foregroundColor(AppTheme.textSecondary)
+                                            }
                                             Text("Checked In")
                                                 .font(AppTheme.captionFont)
                                                 .foregroundColor(AppTheme.statusAvailable)
@@ -605,69 +659,157 @@ struct CheckInView: View {
         scanFieldFocused = true
     }
     
+    func fetchDevicesForPreview() {
+        isFetchingDevices = true
+        Task {
+            do {
+                // Fetch device details for all scanned tags
+                let tagsString = scannedTags.joined(separator: ",")
+                let response = try await APIService.shared.searchDevices(tags: tagsString)
+                
+                var foundDevices: [CheckInPreviewItem] = []
+                var notFound: [String] = []
+                
+                let devicesByTag = Dictionary(grouping: response.devices ?? [], by: { $0.assetTag })
+                
+                for tag in scannedTags {
+                    if let device = devicesByTag[tag]?.first {
+                        // Find the matching Location object for assigned location
+                        let assignedLoc: Location? = {
+                            if let alId = device.assignedLocationId {
+                                return appState.locations.first(where: { $0.id == alId })
+                            }
+                            return nil
+                        }()
+                        
+                        foundDevices.append(CheckInPreviewItem(
+                            assetTag: device.assetTag,
+                            category: device.category,
+                            model: device.model,
+                            currentLocationName: device.locationName ?? "Unknown",
+                            assignedLocation: assignedLoc,
+                            assignedLocationName: device.assignedLocationName ?? "Not Set",
+                            deviceId: device.id
+                        ))
+                    } else {
+                        notFound.append(tag)
+                    }
+                }
+                
+                previewDevices = foundDevices
+                notFoundTags = notFound
+                step = .preview
+                
+            } catch {
+                ToastManager.shared.error("Fetch Failed", detail: "Could not retrieve device details: \(error.localizedDescription)")
+            }
+            isFetchingDevices = false
+        }
+    }
+    
+    func applyOverrideAll() {
+        guard let location = overrideAllLocation else { return }
+        for i in previewDevices.indices {
+            previewDevices[i].assignedLocation = location
+            previewDevices[i].assignedLocationName = location.name
+        }
+        showOverrideAll = false
+        ToastManager.shared.info("Override Applied", detail: "All devices set to \(location.name)")
+    }
+    
     func performCheckin() {
         isProcessing = true
         Task {
             do {
-                let result = try await APIService.shared.bulkCheckin(
-                    assetTags: scannedTags,
-                    locationId: selectedLocation?.id,
-                    assignedLocationId: selectedAssignedLocation?.id,
-                    notes: notes
-                )
+                // Group devices by their target assigned location
+                var groups: [Int?: [CheckInPreviewItem]] = [:]
+                for item in previewDevices {
+                    let locId = item.assignedLocation?.id
+                    groups[locId, default: []].append(item)
+                }
                 
+                var totalCheckedIn = 0
+                var totalNotFound: [String] = []
+                var allEntries: [ScanSessionEntry] = []
                 let now = Date()
-                var entries: [ScanSessionEntry] = []
                 
-                if result.success == true {
-                    let notFoundResult = result.results?.notFound ?? []
+                for (assignedLocId, items) in groups {
+                    let tags = items.map { $0.assetTag }
+                    // For check-in: current location = assigned location (device goes home)
+                    let result = try await APIService.shared.bulkCheckin(
+                        assetTags: tags,
+                        locationId: assignedLocId,
+                        assignedLocationId: assignedLocId,
+                        notes: notes
+                    )
                     
-                    for tag in scannedTags {
-                        let wasNotFound = notFoundResult.contains(tag)
-                        entries.append(ScanSessionEntry(
-                            assetTag: tag,
-                            status: wasNotFound ? .notFound : .success,
-                            category: nil,
-                            model: nil,
-                            location: selectedLocation?.name,
-                            assignedTo: nil,
-                            notes: wasNotFound ? "Device not found in system" : "Checked in",
-                            timestamp: now
-                        ))
+                    if result.success == true {
+                        let notFoundResult = result.results?.notFound ?? []
+                        totalNotFound.append(contentsOf: notFoundResult)
+                        
+                        for item in items {
+                            let wasNotFound = notFoundResult.contains(item.assetTag)
+                            if !wasNotFound { totalCheckedIn += 1 }
+                            allEntries.append(ScanSessionEntry(
+                                assetTag: item.assetTag,
+                                status: wasNotFound ? .notFound : .success,
+                                category: item.category,
+                                model: item.model,
+                                location: item.assignedLocation?.name ?? item.assignedLocationName,
+                                assignedTo: nil,
+                                notes: wasNotFound ? "Device not found in system" : "Checked in to \(item.assignedLocation?.name ?? item.assignedLocationName)",
+                                timestamp: now
+                            ))
+                        }
+                    } else {
+                        for item in items {
+                            allEntries.append(ScanSessionEntry(
+                                assetTag: item.assetTag,
+                                status: .error,
+                                category: item.category,
+                                model: item.model,
+                                location: nil,
+                                assignedTo: nil,
+                                notes: result.error ?? "Unknown error",
+                                timestamp: now
+                            ))
+                        }
                     }
-                } else {
-                    for tag in scannedTags {
-                        entries.append(ScanSessionEntry(
-                            assetTag: tag,
-                            status: .error,
-                            category: nil,
-                            model: nil,
-                            location: nil,
-                            assignedTo: nil,
-                            notes: result.error ?? "Unknown error",
-                            timestamp: now
-                        ))
-                    }
+                }
+                
+                // Add not-found tags from the initial scan
+                for tag in notFoundTags {
+                    allEntries.append(ScanSessionEntry(
+                        assetTag: tag,
+                        status: .notFound,
+                        category: nil,
+                        model: nil,
+                        location: nil,
+                        assignedTo: nil,
+                        notes: "Device not found in inventory",
+                        timestamp: now
+                    ))
                 }
                 
                 sessionLog = ScanSessionLog(
                     sessionType: .checkin,
                     startTime: sessionStartTime,
                     endTime: now,
-                    entries: entries,
-                    location: selectedLocation?.name,
+                    entries: allEntries,
+                    location: nil,
                     person: nil,
                     event: appState.currentEvent?.name,
                     performedBy: appState.currentUser?.displayName ?? appState.currentUser?.username,
                     notes: notes.isEmpty ? nil : notes
                 )
                 
-                // Confirm write to database
-                if result.success == true {
-                    let checkedIn = result.results?.checkedIn ?? scannedTags.count
-                    ToastManager.shared.success("Check-In Saved", detail: "\(checkedIn) device(s) checked in and written to database.")
+                // Toast confirmation
+                if totalCheckedIn > 0 {
+                    ToastManager.shared.success("Check-In Saved", detail: "\(totalCheckedIn) device(s) checked in and written to database.")
+                } else if !totalNotFound.isEmpty {
+                    ToastManager.shared.warning("Partial Check-In", detail: "\(totalNotFound.count) device(s) were not found.")
                 } else {
-                    ToastManager.shared.error("Check-In Failed", detail: result.error ?? "Database write was not confirmed.")
+                    ToastManager.shared.error("Check-In Failed", detail: "No devices were checked in.")
                 }
                 
                 step = .complete
@@ -685,14 +827,161 @@ struct CheckInView: View {
         step = .scan
         scannedTags.removeAll()
         scanText = ""
-        selectedLocation = nil
-        selectedAssignedLocation = nil
         notes = ""
-        showNewLocation = false
-        showNewAssignedLocation = false
-        newLocationName = ""
-        newAssignedLocationName = ""
+        previewDevices.removeAll()
+        notFoundTags.removeAll()
+        showOverrideAll = false
+        overrideAllLocation = nil
+        newOverrideLocationName = ""
+        showNewOverrideLocation = false
         sessionLog = nil
         scanFieldFocused = true
+    }
+}
+
+// MARK: - Preview Item Model
+struct CheckInPreviewItem: Identifiable {
+    let id = UUID()
+    var assetTag: String
+    var category: String?
+    var model: String?
+    var currentLocationName: String  // Read-only: where device is now
+    var assignedLocation: Location?  // Editable: where it will be checked in to
+    var assignedLocationName: String // Display name (fallback if no Location object)
+    var deviceId: Int?
+}
+
+// MARK: - Preview Row View
+struct CheckInPreviewRow: View {
+    @Binding var item: CheckInPreviewItem
+    let locations: [Location]
+    let appState: AppState
+    
+    @State private var showLocationPicker = false
+    @State private var newLocationName = ""
+    @State private var showNewLocation = false
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Asset Tag
+            CopyableAssetTag(assetTag: item.assetTag)
+                .frame(width: 140, alignment: .leading)
+            
+            // Category / Model
+            VStack(alignment: .leading, spacing: 1) {
+                if let category = item.category {
+                    Text(category)
+                        .font(.system(size: 11))
+                        .foregroundColor(AppTheme.textSecondary)
+                }
+                if let model = item.model {
+                    Text(model)
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.textMuted)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 180, alignment: .leading)
+            
+            // Current Location (read-only)
+            Text(item.currentLocationName)
+                .font(.system(size: 11))
+                .foregroundColor(AppTheme.textMuted)
+                .frame(width: 160, alignment: .leading)
+            
+            // Assigned Location (editable)
+            HStack(spacing: 6) {
+                if showLocationPicker {
+                    Picker("", selection: Binding(
+                        get: { item.assignedLocation },
+                        set: { newLoc in
+                            item.assignedLocation = newLoc
+                            item.assignedLocationName = newLoc?.name ?? item.assignedLocationName
+                            showLocationPicker = false
+                        }
+                    )) {
+                        Text("-- Select --").tag(nil as Location?)
+                        ForEach(locations, id: \.id) { loc in
+                            Text(loc.name).tag(Optional(loc))
+                        }
+                    }
+                    .frame(width: 160)
+                    
+                    Button(action: { showNewLocation.toggle() }) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppTheme.primaryPurpleLight)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: { showLocationPicker = false }) {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(item.assignedLocation?.name ?? item.assignedLocationName)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(AppTheme.statusAvailable)
+                    
+                    Button(action: { showLocationPicker = true }) {
+                        Image(systemName: "pencil.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(AppTheme.primaryPurpleLight)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Change assigned location for this device")
+                }
+                
+                Spacer()
+            }
+            .frame(minWidth: 200, alignment: .leading)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(AppTheme.surfaceDefault.opacity(0.3))
+        .cornerRadius(4)
+        .overlay(
+            Group {
+                if showNewLocation {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 8) {
+                            TextField("New location", text: $newLocationName)
+                                .darkTextField()
+                                .frame(width: 160)
+                            Button(action: {
+                                Task {
+                                    if let loc = await appState.createLocation(name: newLocationName) {
+                                        let matched = appState.locations.first(where: { $0.id == loc.id }) ?? loc
+                                        item.assignedLocation = matched
+                                        item.assignedLocationName = matched.name
+                                        newLocationName = ""
+                                        showNewLocation = false
+                                        showLocationPicker = false
+                                    }
+                                }
+                            }) {
+                                Text("Create")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.primaryPurpleLight)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(newLocationName.isEmpty)
+                            Button(action: { showNewLocation = false }) {
+                                Text("Cancel")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(8)
+                        .background(AppTheme.backgroundDark)
+                        .cornerRadius(6)
+                    }
+                }
+            }
+        )
     }
 }
