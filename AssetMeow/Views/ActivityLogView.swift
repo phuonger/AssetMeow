@@ -26,6 +26,8 @@ struct ActivityLogView: View {
     @State private var dateFrom: Date? = nil
     @State private var dateTo: Date? = nil
     @State private var showDateFilter = false
+    @State private var filterUser = ""
+    @State private var errorMessage: String? = nil
     
     var filteredActivities: [ActivityEntry] {
         var result = activities
@@ -110,6 +112,25 @@ struct ActivityLogView: View {
                     .popover(isPresented: $showDateFilter) {
                         dateFilterPopover
                     }
+                    
+                    // User filter
+                    HStack(spacing: 4) {
+                        Image(systemName: "person")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppTheme.textMuted)
+                        TextField("User...", text: $filterUser)
+                            .font(.system(size: 12))
+                            .frame(width: 80)
+                            .onSubmit { loadActivity() }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.backgroundDark)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(AppTheme.surfaceBorder, lineWidth: 0.5)
+                    )
                     
                     // Filter by action
                     Picker("Action", selection: $filterAction) {
@@ -200,7 +221,13 @@ struct ActivityLogView: View {
                         Text("No activity found")
                             .font(AppTheme.bodyFont)
                             .foregroundColor(AppTheme.textMuted)
-                        if !searchText.isEmpty || filterAction != "All" {
+                        if let error = errorMessage {
+                            Text("Error: \(error)")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.statusMissing)
+                                .padding(.horizontal, 20)
+                                .multilineTextAlignment(.center)
+                        } else if !searchText.isEmpty || filterAction != "All" {
                             Text("Try adjusting your search or filter.")
                                 .font(AppTheme.captionFont)
                                 .foregroundColor(AppTheme.textMuted)
@@ -561,18 +588,24 @@ struct ActivityLogView: View {
     
     func loadActivity() {
         isLoading = true
+        errorMessage = nil
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         let fromStr = dateFrom != nil ? fmt.string(from: dateFrom!) : nil
         let toStr = dateTo != nil ? fmt.string(from: dateTo!) : nil
+        let userStr = filterUser.isEmpty ? nil : filterUser
         
         Task {
             do {
-                let resp = try await APIService.shared.getActivity(limit: limit, dateFrom: fromStr, dateTo: toStr)
+                let resp = try await APIService.shared.getActivity(limit: limit, dateFrom: fromStr, dateTo: toStr, user: userStr)
                 await MainActor.run {
                     activities = resp.activity
+                    errorMessage = nil
                 }
             } catch {
+                await MainActor.run {
+                    errorMessage = "\(error)"
+                }
                 print("Error loading activity: \(error)")
             }
             await MainActor.run {

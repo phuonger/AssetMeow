@@ -348,12 +348,13 @@ class APIService {
     }
     
     // MARK: - Activity
-    func getActivity(deviceId: Int? = nil, actionType: String? = nil, limit: Int = 50, dateFrom: String? = nil, dateTo: String? = nil) async throws -> ActivityResponse {
+    func getActivity(deviceId: Int? = nil, actionType: String? = nil, limit: Int = 200, dateFrom: String? = nil, dateTo: String? = nil, user: String? = nil) async throws -> ActivityResponse {
         var params: [String: String] = ["limit": "\(limit)"]
         if let deviceId = deviceId { params["device_id"] = "\(deviceId)" }
         if let actionType = actionType { params["action_type"] = actionType }
         if let dateFrom = dateFrom { params["date_from"] = dateFrom }
         if let dateTo = dateTo { params["date_to"] = dateTo }
+        if let user = user { params["user"] = user }
         return try await request("activity", queryParams: params)
     }
     
