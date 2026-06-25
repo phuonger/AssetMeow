@@ -17,6 +17,9 @@ struct InventoryListView: View {
     @State private var selectedAssetTag: String?
     @State private var editingDevice: Device?
     
+    // Add new asset
+    @State private var showAddDevice = false
+    
     // Multi-select
     @State private var isMultiSelectMode = false
     @State private var selectedDeviceIds: Set<Int> = []
@@ -92,6 +95,21 @@ struct InventoryListView: View {
                             .foregroundColor(AppTheme.textPrimary)
                     }
                     Spacer()
+                    
+                    // Add New Asset button
+                    Button(action: { showAddDevice = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add Asset")
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.primaryPurple)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
                     
                     // Multi-select toggle
                     Button(action: {
@@ -506,6 +524,12 @@ struct InventoryListView: View {
         }
         .sheet(item: $editingDevice) { device in
             DeviceEditSheet(device: device) {
+                loadDevices()
+            }
+            .environmentObject(appState)
+        }
+        .sheet(isPresented: $showAddDevice) {
+            AddDeviceSheet {
                 loadDevices()
             }
             .environmentObject(appState)
@@ -1091,6 +1115,312 @@ struct DeviceEditSheet: View {
                 dismiss()
             } catch {
                 print("Error saving: \(error)")
+            }
+            isSaving = false
+        }
+    }
+}
+
+// MARK: - Add New Device Sheet
+struct AddDeviceSheet: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
+    
+    let onSave: () -> Void
+    
+    @State private var assetTag = ""
+    @State private var category = ""
+    @State private var model = ""
+    @State private var sku = ""
+    @State private var status: DeviceStatus = .available
+    @State private var selectedLocation: Location?
+    @State private var selectedAssignedLocation: Location?
+    @State private var selectedPerson: Person?
+    @State private var account = ""
+    @State private var liveOrDummy = "N/A"
+    @State private var notes = ""
+    @State private var customFields: [(key: String, value: String)] = []
+    @State private var newCustomFieldName = ""
+    @State private var newCustomFieldValue = ""
+    @State private var isSaving = false
+    @State private var errorMessage = ""
+    
+    var body: some View {
+        ZStack {
+            AppTheme.backgroundMedium.ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                // Header
+                HStack {
+                    Text("Add New Asset")
+                        .font(AppTheme.headingFont)
+                        .foregroundColor(AppTheme.textPrimary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top)
+                
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Asset Tag (required)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Asset Tag *")
+                                .font(AppTheme.subheadingFont)
+                                .foregroundColor(AppTheme.textPrimary)
+                            
+                            HStack {
+                                Text("Asset Tag")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                TextField("Required — unique identifier", text: $assetTag)
+                                    .darkTextField()
+                                    .frame(width: 220)
+                            }
+                            
+                            if !errorMessage.isEmpty {
+                                Text(errorMessage)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.statusMissing)
+                                    .padding(.leading, 104)
+                            }
+                        }
+                        .glowCardStyle()
+                        
+                        // Standard Fields
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Device Details")
+                                .font(AppTheme.subheadingFont)
+                                .foregroundColor(AppTheme.textPrimary)
+                            
+                            addFieldRow("Category", $category)
+                            addFieldRow("Model", $model)
+                            addFieldRow("SKU / Style", $sku)
+                            
+                            HStack {
+                                Text("Status")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $status) {
+                                    ForEach(DeviceStatus.allCases, id: \.self) { s in
+                                        Text(s.rawValue).tag(s)
+                                    }
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            HStack {
+                                Text("Current Location")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $selectedLocation) {
+                                    Text("-- None --").tag(nil as Location?)
+                                    ForEach(appState.locations, id: \.id) { loc in
+                                        Text(loc.name).tag(Optional(loc))
+                                    }
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            HStack {
+                                Text("Assigned Location")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $selectedAssignedLocation) {
+                                    Text("-- None --").tag(nil as Location?)
+                                    ForEach(appState.locations, id: \.id) { loc in
+                                        Text(loc.name).tag(Optional(loc))
+                                    }
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            HStack {
+                                Text("Assigned To")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $selectedPerson) {
+                                    Text("-- None --").tag(nil as Person?)
+                                    ForEach(appState.people, id: \.id) { p in
+                                        Text(p.name).tag(Optional(p))
+                                    }
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            addFieldRow("Account", $account)
+                            
+                            HStack {
+                                Text("Live/Dummy")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $liveOrDummy) {
+                                    Text("N/A").tag("N/A")
+                                    Text("Live").tag("Live")
+                                    Text("Dummy").tag("Dummy")
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            addFieldRow("Notes", $notes)
+                        }
+                        .glowCardStyle()
+                        
+                        // Custom Fields
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Custom Fields")
+                                .font(AppTheme.subheadingFont)
+                                .foregroundColor(AppTheme.textPrimary)
+                            
+                            if customFields.isEmpty {
+                                Text("No custom fields added")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                            } else {
+                                ForEach(Array(customFields.enumerated()), id: \.offset) { index, field in
+                                    HStack {
+                                        Text(field.key)
+                                            .font(AppTheme.captionFont)
+                                            .foregroundColor(AppTheme.textMuted)
+                                            .frame(width: 100, alignment: .trailing)
+                                        TextField(field.key, text: Binding(
+                                            get: { customFields[index].value },
+                                            set: { customFields[index].value = $0 }
+                                        ))
+                                        .darkTextField()
+                                        .frame(width: 180)
+                                        Button(action: { customFields.remove(at: index) }) {
+                                            Image(systemName: "minus.circle.fill")
+                                                .foregroundColor(AppTheme.statusMissing)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            
+                            // Add new custom field
+                            HStack {
+                                TextField("Field Name", text: $newCustomFieldName)
+                                    .darkTextField()
+                                    .frame(width: 100)
+                                TextField("Value", text: $newCustomFieldValue)
+                                    .darkTextField()
+                                    .frame(width: 150)
+                                Button(action: {
+                                    if !newCustomFieldName.isEmpty {
+                                        customFields.append((key: newCustomFieldName, value: newCustomFieldValue))
+                                        newCustomFieldName = ""
+                                        newCustomFieldValue = ""
+                                    }
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(AppTheme.statusAvailable)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(newCustomFieldName.isEmpty)
+                            }
+                        }
+                        .glowCardStyle()
+                    }
+                    .padding(.horizontal)
+                }
+                
+                // Buttons
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Text("Cancel")
+                            .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                    
+                    Button(action: createDevice) {
+                        HStack(spacing: 6) {
+                            if isSaving {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.7)
+                            }
+                            Text("Create Asset")
+                        }
+                        .primaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(assetTag.trimmingCharacters(in: .whitespaces).isEmpty || isSaving)
+                }
+                .padding()
+            }
+        }
+        .frame(width: 500, height: 600)
+    }
+    
+    func addFieldRow(_ label: String, _ value: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+                .font(AppTheme.captionFont)
+                .foregroundColor(AppTheme.textMuted)
+                .frame(width: 100, alignment: .trailing)
+            TextField(label, text: value)
+                .darkTextField()
+                .frame(width: 180)
+        }
+    }
+    
+    func createDevice() {
+        let tag = assetTag.trimmingCharacters(in: .whitespaces)
+        guard !tag.isEmpty else {
+            errorMessage = "Asset tag is required."
+            return
+        }
+        
+        errorMessage = ""
+        isSaving = true
+        
+        var deviceData: [String: Any] = [
+            "asset_tag": tag,
+            "category": category,
+            "model": model,
+            "sku": sku,
+            "status": status.rawValue,
+            "account": account,
+            "live_or_dummy": liveOrDummy,
+            "notes": notes
+        ]
+        if let locId = selectedLocation?.id { deviceData["location_id"] = locId }
+        if let assignedLocId = selectedAssignedLocation?.id { deviceData["assigned_location_id"] = assignedLocId }
+        if let personId = selectedPerson?.id { deviceData["assigned_to_id"] = personId }
+        
+        var customDataDict: [String: String] = [:]
+        for field in customFields {
+            if !field.key.isEmpty {
+                customDataDict[field.key] = field.value
+            }
+        }
+        if !customDataDict.isEmpty {
+            deviceData["custom_data"] = customDataDict
+        }
+        
+        Task {
+            do {
+                let _ = try await APIService.shared.createDevice(deviceData)
+                ToastNotification.show("Asset \(tag) created successfully", type: .success)
+                onSave()
+                dismiss()
+            } catch let error as APIError {
+                switch error {
+                case .serverError(_, let msg):
+                    errorMessage = msg
+                default:
+                    errorMessage = error.localizedDescription
+                }
+            } catch {
+                errorMessage = error.localizedDescription
             }
             isSaving = false
         }
