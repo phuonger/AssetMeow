@@ -161,14 +161,24 @@ class AppState: ObservableObject {
     
     private func startStationTimer() {
         stationTimer?.invalidate()
-        stationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        stationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if self.stationTimeRemaining > 0 {
                     self.stationTimeRemaining -= 1
                 } else {
                     // Session expired
-                    await self.endStationSession()
+                    self.stationTimer?.invalidate()
+                    self.stationTimer = nil
+                    self.stationTimeRemaining = 300
+                    self.stationSessionActive = false
+                    await self.api.logout()
+                    self.isLoggedIn = false
+                    self.currentUser = nil
                 }
             }
         }
