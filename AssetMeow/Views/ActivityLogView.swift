@@ -23,6 +23,9 @@ struct ActivityLogView: View {
     // Filter
     @State private var filterAction = "All"
     @State private var searchText = ""
+    @State private var dateFrom: Date? = nil
+    @State private var dateTo: Date? = nil
+    @State private var showDateFilter = false
     
     var filteredActivities: [ActivityEntry] {
         var result = activities
@@ -80,6 +83,33 @@ struct ActivityLogView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(AppTheme.surfaceBorder, lineWidth: 0.5)
                     )
+                    
+                    // Date range filter
+                    Button(action: { showDateFilter.toggle() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                            if dateFrom != nil || dateTo != nil {
+                                Text(dateRangeLabel)
+                                    .lineLimit(1)
+                            } else {
+                                Text("Date Range")
+                            }
+                        }
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(dateFrom != nil || dateTo != nil ? AppTheme.accentCyan : AppTheme.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background((dateFrom != nil || dateTo != nil) ? AppTheme.accentCyan.opacity(0.1) : AppTheme.backgroundDark)
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(AppTheme.surfaceBorder, lineWidth: 0.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showDateFilter) {
+                        dateFilterPopover
+                    }
                     
                     // Filter by action
                     Picker("Action", selection: $filterAction) {
@@ -463,11 +493,82 @@ struct ActivityLogView: View {
         }
     }
     
+    var dateRangeLabel: String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        if let from = dateFrom, let to = dateTo {
+            return "\(fmt.string(from: from)) - \(fmt.string(from: to))"
+        } else if let from = dateFrom {
+            return "From \(fmt.string(from: from))"
+        } else if let to = dateTo {
+            return "Until \(fmt.string(from: to))"
+        }
+        return "Date Range"
+    }
+    
+    var dateFilterPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Date Range")
+                .font(AppTheme.subheadingFont)
+                .foregroundColor(AppTheme.textPrimary)
+            
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("From")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                    DatePicker("", selection: Binding(
+                        get: { dateFrom ?? Calendar.current.date(byAdding: .day, value: -7, to: Date())! },
+                        set: { dateFrom = $0 }
+                    ), displayedComponents: .date)
+                    .labelsHidden()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("To")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                    DatePicker("", selection: Binding(
+                        get: { dateTo ?? Date() },
+                        set: { dateTo = $0 }
+                    ), displayedComponents: .date)
+                    .labelsHidden()
+                }
+            }
+            
+            HStack {
+                Button("Clear") {
+                    dateFrom = nil
+                    dateTo = nil
+                    showDateFilter = false
+                    loadActivity()
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(AppTheme.statusMissing)
+                
+                Spacer()
+                
+                Button("Apply") {
+                    showDateFilter = false
+                    loadActivity()
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(AppTheme.primaryPurpleLight)
+            }
+        }
+        .padding(16)
+        .frame(width: 280)
+    }
+    
     func loadActivity() {
         isLoading = true
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        let fromStr = dateFrom != nil ? fmt.string(from: dateFrom!) : nil
+        let toStr = dateTo != nil ? fmt.string(from: dateTo!) : nil
+        
         Task {
             do {
-                let resp = try await APIService.shared.getActivity(limit: limit)
+                let resp = try await APIService.shared.getActivity(limit: limit, dateFrom: fromStr, dateTo: toStr)
                 await MainActor.run {
                     activities = resp.activity
                 }

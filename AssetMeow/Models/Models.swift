@@ -400,11 +400,23 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
             deviceId = nil
         }
         action = try? container.decodeIfPresent(String.self, forKey: .action)
-        assetTag = try? container.decodeIfPresent(String.self, forKey: .assetTag)
+        if let strTag = try? container.decodeIfPresent(String.self, forKey: .assetTag) {
+            assetTag = strTag
+        } else if let intTag = try? container.decodeIfPresent(Int.self, forKey: .assetTag) {
+            assetTag = String(intTag)
+        } else {
+            assetTag = nil
+        }
         model = try? container.decodeIfPresent(String.self, forKey: .model)
         category = try? container.decodeIfPresent(String.self, forKey: .category)
         make = try? container.decodeIfPresent(String.self, forKey: .make)
-        sku = try? container.decodeIfPresent(String.self, forKey: .sku)
+        if let strSku = try? container.decodeIfPresent(String.self, forKey: .sku) {
+            sku = strSku
+        } else if let intSku = try? container.decodeIfPresent(Int.self, forKey: .sku) {
+            sku = String(intSku)
+        } else {
+            sku = nil
+        }
         fromLocation = try? container.decodeIfPresent(String.self, forKey: .fromLocation)
         toLocation = try? container.decodeIfPresent(String.self, forKey: .toLocation)
         fromPerson = try? container.decodeIfPresent(String.self, forKey: .fromPerson)
@@ -477,6 +489,39 @@ struct EventsResponse: Codable {
 
 struct ActivityResponse: Codable {
     let activity: [ActivityEntry]
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Lossy decode - skip entries that fail instead of failing entire response
+        if let entries = try? container.decode([ActivityEntry].self, forKey: .activity) {
+            activity = entries
+        } else {
+            // Try decoding one by one, skipping failures
+            var entriesContainer = try container.nestedUnkeyedContainer(forKey: .activity)
+            var decoded: [ActivityEntry] = []
+            while !entriesContainer.isAtEnd {
+                if let entry = try? entriesContainer.decode(ActivityEntry.self) {
+                    decoded.append(entry)
+                } else {
+                    // Skip the failed entry
+                    _ = try? entriesContainer.decode(AnyCodable.self)
+                }
+            }
+            activity = decoded
+        }
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case activity
+    }
+}
+
+// Helper for skipping undecodable entries
+private struct AnyCodable: Codable {
+    init(from decoder: Decoder) throws {
+        _ = try decoder.singleValueContainer()
+    }
+    func encode(to encoder: Encoder) throws {}
 }
 
 struct LookupResponse: Codable {
