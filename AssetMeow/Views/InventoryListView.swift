@@ -680,7 +680,7 @@ struct InventoryListView: View {
                             } catch let error as APIError {
                                 // Treat 404/already-deleted as success
                                 switch error {
-                                case .serverError(let msg) where msg.contains("not found") || msg.contains("404"):
+                                case .serverError(let code, let msg) where code == 404 || msg.contains("not found"):
                                     return (id, true, true)
                                 default:
                                     return (id, false, false)
