@@ -516,13 +516,6 @@ struct ActivityResponse: Codable {
     }
 }
 
-// Helper for skipping undecodable entries
-private struct AnyCodable: Codable {
-    init(from decoder: Decoder) throws {
-        _ = try decoder.singleValueContainer()
-    }
-    func encode(to encoder: Encoder) throws {}
-}
 
 struct LookupResponse: Codable {
     let device: Device?
