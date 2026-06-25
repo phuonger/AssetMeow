@@ -71,7 +71,19 @@ class APIService {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         
-        let (data, response) = try await session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let urlError as URLError {
+            switch urlError.code {
+            case .timedOut:
+                throw APIError.timeout
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw APIError.networkUnavailable
+            default:
+                throw APIError.invalidResponse
+            }
+        }
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -366,6 +378,8 @@ enum APIError: LocalizedError {
     case unauthorized
     case serverError(Int, String)
     case decodingError(String)
+    case timeout
+    case networkUnavailable
     
     var errorDescription: String? {
         switch self {
@@ -374,6 +388,8 @@ enum APIError: LocalizedError {
         case .unauthorized: return "Unauthorized. Check your credentials."
         case .serverError(let code, let msg): return "Server error (\(code)): \(msg)"
         case .decodingError(let msg): return "Data error: \(msg)"
+        case .timeout: return "Request timed out. Check your network connection."
+        case .networkUnavailable: return "Network unavailable. Check your internet connection."
         }
     }
 }

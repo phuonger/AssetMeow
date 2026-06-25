@@ -5,7 +5,8 @@ struct CheckInView: View {
     
     enum Step {
         case scan
-        case preview
+        case review       // NEW: validation review showing found vs not-found
+        case preview      // assignment preview for found devices
         case complete
     }
     
@@ -18,9 +19,14 @@ struct CheckInView: View {
     @State private var isProcessing = false
     @State private var isFetchingDevices = false
     
+    // Validation results
+    @State private var validatedDevices: [ValidatedDevice] = []
+    @State private var notFoundTags: [String] = []
+    @State private var validationError = ""
+    @State private var skippedNotFoundTags: [String] = []
+    
     // Preview data
     @State private var previewDevices: [CheckInPreviewItem] = []
-    @State private var notFoundTags: [String] = []
     
     // Override all
     @State private var showOverrideAll = false
@@ -57,11 +63,15 @@ struct CheckInView: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
-                        stepBadge(2, "Preview", active: step == .preview)
+                        stepBadge(2, "Review", active: step == .review)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
-                        stepBadge(3, "Done", active: step == .complete)
+                        stepBadge(3, "Preview", active: step == .preview)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.textMuted)
+                        stepBadge(4, "Done", active: step == .complete)
                     }
                 }
                 .padding(20)
@@ -69,6 +79,8 @@ struct CheckInView: View {
                 switch step {
                 case .scan:
                     scanStepView
+                case .review:
+                    reviewStepView
                 case .preview:
                     previewStepView
                 case .complete:
@@ -81,7 +93,8 @@ struct CheckInView: View {
     var stepDescription: String {
         switch step {
         case .scan: return "Scan devices being returned"
-        case .preview: return "Review devices and confirm assigned locations"
+        case .review: return "Review which devices were found in the system"
+        case .preview: return "Confirm assigned locations for check-in"
         case .complete: return "Session complete — review results and download log"
         }
     }
@@ -202,13 +215,7 @@ struct CheckInView: View {
                 
                 Spacer()
                 
-                Button(action: {
-                    if scannedTags.isEmpty { processScannedInput() }
-                    if !scannedTags.isEmpty {
-                        sessionStartTime = Date()
-                        fetchDevicesForPreview()
-                    }
-                }) {
+                Button(action: submitScans) {
                     HStack(spacing: 6) {
                         if isFetchingDevices {
                             ProgressView()
@@ -227,7 +234,214 @@ struct CheckInView: View {
         }
     }
     
-    // MARK: - Step 2: Preview / Confirmation
+    // MARK: - Step 2: Review (Validation)
+    var reviewStepView: some View {
+        VStack(spacing: 12) {
+            if isFetchingDevices {
+                Spacer()
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.primaryPurple))
+                Text("Validating devices...")
+                    .font(AppTheme.bodyFont)
+                    .foregroundColor(AppTheme.textSecondary)
+                Spacer()
+            } else if !validationError.isEmpty {
+                // Show error with retry option
+                Spacer()
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(AppTheme.statusMissing.opacity(0.15))
+                            .frame(width: 60, height: 60)
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(AppTheme.statusMissing)
+                    }
+                    Text("Validation Error")
+                        .font(AppTheme.headingFont)
+                        .foregroundColor(AppTheme.textPrimary)
+                    Text(validationError)
+                        .font(AppTheme.bodyFont)
+                        .foregroundColor(AppTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                }
+                Spacer()
+                HStack {
+                    Button(action: { step = .scan; validationError = "" }) {
+                        Text("Back to Scan")
+                            .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                    Button(action: { validationError = ""; retryValidation() }) {
+                        Text("Retry")
+                            .primaryButton()
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(20)
+            } else {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Found devices
+                        if !validatedDevices.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(AppTheme.statusAvailable)
+                                    Text("\(validatedDevices.count) device(s) found in system")
+                                        .font(AppTheme.subheadingFont)
+                                        .foregroundColor(AppTheme.textPrimary)
+                                }
+                                
+                                VStack(spacing: 2) {
+                                    ForEach(validatedDevices, id: \.assetTag) { device in
+                                        HStack {
+                                            CopyableAssetTag(assetTag: device.assetTag)
+                                                .frame(width: 140, alignment: .leading)
+                                            CopyableText(text: device.category ?? "—")
+                                                .frame(width: 80, alignment: .leading)
+                                            CopyableText(text: device.model ?? "—")
+                                                .frame(width: 100, alignment: .leading)
+                                            Text(device.status ?? "—")
+                                                .font(AppTheme.captionFont)
+                                                .foregroundColor(AppTheme.statusColor(for: device.status ?? ""))
+                                            Spacer()
+                                            Text(device.locationName ?? "—")
+                                                .font(AppTheme.captionFont)
+                                                .foregroundColor(AppTheme.textMuted)
+                                        }
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(AppTheme.statusAvailable.opacity(0.05))
+                                        .cornerRadius(6)
+                                    }
+                                }
+                            }
+                            .cardStyle()
+                        }
+                        
+                        // Not found devices — warning section
+                        if !notFoundTags.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(AppTheme.statusCheckedOut)
+                                    Text("\(notFoundTags.count) tag(s) NOT found in system")
+                                        .font(AppTheme.subheadingFont)
+                                        .foregroundColor(AppTheme.textPrimary)
+                                    Spacer()
+                                }
+                                
+                                Text("These tags don't match any device in inventory. They may be serial numbers or incorrect scans. You can remove them or skip them and continue with the valid devices only.")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textSecondary)
+                                    .padding(.bottom, 4)
+                                
+                                VStack(spacing: 4) {
+                                    ForEach(Array(notFoundTags.enumerated()), id: \.offset) { index, tag in
+                                        HStack(spacing: 8) {
+                                            CopyableAssetTag(assetTag: tag)
+                                                .frame(width: 160, alignment: .leading)
+                                            
+                                            Text("Not Found")
+                                                .font(.system(size: 10, weight: .medium))
+                                                .foregroundColor(AppTheme.statusMissing)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(AppTheme.statusMissing.opacity(0.1))
+                                                .cornerRadius(4)
+                                            
+                                            Spacer()
+                                            
+                                            // Remove button
+                                            Button(action: {
+                                                notFoundTags.remove(at: index)
+                                            }) {
+                                                HStack(spacing: 2) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                    Text("Remove")
+                                                }
+                                                .font(.system(size: 10))
+                                                .foregroundColor(AppTheme.statusMissing)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 8)
+                                        .background(AppTheme.statusMissing.opacity(0.05))
+                                        .cornerRadius(6)
+                                    }
+                                }
+                            }
+                            .cardStyle()
+                        }
+                        
+                        // Empty state - all tags were not found
+                        if validatedDevices.isEmpty && notFoundTags.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(AppTheme.textMuted)
+                                Text("No devices to process")
+                                    .font(AppTheme.bodyFont)
+                                    .foregroundColor(AppTheme.textSecondary)
+                            }
+                            .padding(.vertical, 40)
+                        }
+                    }
+                    .padding(20)
+                }
+                
+                // Bottom buttons
+                HStack {
+                    Button(action: {
+                        step = .scan
+                        validationError = ""
+                    }) {
+                        Text("Back to Scan")
+                            .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Spacer()
+                    
+                    // Skip unknown and continue with valid devices
+                    if !notFoundTags.isEmpty && !validatedDevices.isEmpty {
+                        Button(action: skipUnknownAndProceed) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 10))
+                                Text("Skip Unknown (\(notFoundTags.count))")
+                            }
+                            .secondaryButton()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // Continue with found devices only (when no not-found tags or all removed)
+                    if notFoundTags.isEmpty && !validatedDevices.isEmpty {
+                        Button(action: proceedToPreview) {
+                            Text("Continue to Check-In")
+                                .primaryButton()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // All not found - no valid devices
+                    if !notFoundTags.isEmpty && validatedDevices.isEmpty {
+                        Text("No valid devices to check in")
+                            .font(AppTheme.captionFont)
+                            .foregroundColor(AppTheme.statusMissing)
+                    }
+                }
+                .padding(20)
+            }
+        }
+    }
+    
+    // MARK: - Step 3: Preview / Confirmation
     var previewStepView: some View {
         VStack(spacing: 0) {
             // Header info
@@ -240,6 +454,19 @@ struct CheckInView: View {
                         Text("Devices will be checked in to their Assigned Location. Override if needed.")
                             .font(AppTheme.captionFont)
                             .foregroundColor(AppTheme.textSecondary)
+                        
+                        // Show skipped warning if any
+                        if !skippedNotFoundTags.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.accentOrange)
+                                Text("\(skippedNotFoundTags.count) unknown tag(s) were skipped and will be logged")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(AppTheme.accentOrange)
+                            }
+                            .padding(.top, 2)
+                        }
                     }
                     Spacer()
                     
@@ -347,25 +574,6 @@ struct CheckInView: View {
             .padding(.top, 10)
             .padding(.bottom, 12)
             
-            // Not found warning
-            if !notFoundTags.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(AppTheme.statusMissing)
-                    Text("\(notFoundTags.count) device(s) not found in inventory:")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.statusMissing)
-                    Text(notFoundTags.joined(separator: ", "))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(AppTheme.textSecondary)
-                        .lineLimit(1)
-                    Spacer()
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .background(AppTheme.statusMissing.opacity(0.08))
-            }
-            
             // Table header
             HStack(spacing: 0) {
                 Text("Asset Tag")
@@ -401,8 +609,8 @@ struct CheckInView: View {
                     Text("\(previewDevices.count) device(s) ready for check-in")
                         .font(AppTheme.captionFont)
                         .foregroundColor(AppTheme.textSecondary)
-                    if !notFoundTags.isEmpty {
-                        Text("\(notFoundTags.count) not found (will be skipped)")
+                    if !skippedNotFoundTags.isEmpty {
+                        Text("\(skippedNotFoundTags.count) unknown tag(s) skipped (will be logged)")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.statusMissing)
                     }
@@ -416,9 +624,8 @@ struct CheckInView: View {
             // Bottom buttons
             HStack {
                 Button(action: {
-                    step = .scan
+                    step = .review
                     previewDevices.removeAll()
-                    notFoundTags.removeAll()
                 }) {
                     Text("Back")
                         .secondaryButton()
@@ -445,7 +652,7 @@ struct CheckInView: View {
         }
     }
     
-    // MARK: - Step 3: Complete (Session Summary)
+    // MARK: - Step 4: Complete (Session Summary)
     var completeStepView: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -503,7 +710,7 @@ struct CheckInView: View {
                                 HStack {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .foregroundColor(AppTheme.statusMissing)
-                                    Text("\(log.notFoundEntries.count) Devices Not Found")
+                                    Text("\(log.notFoundEntries.count) Devices Not Found / Skipped")
                                         .font(AppTheme.subheadingFont)
                                         .foregroundColor(AppTheme.textPrimary)
                                     Spacer()
@@ -530,7 +737,7 @@ struct CheckInView: View {
                                         HStack {
                                             CopyableAssetTag(assetTag: entry.assetTag)
                                             Spacer()
-                                            Text("Not Found")
+                                            Text(entry.notes ?? "Not Found")
                                                 .font(AppTheme.captionFont)
                                                 .foregroundColor(AppTheme.textMuted)
                                         }
@@ -659,52 +866,77 @@ struct CheckInView: View {
         scanFieldFocused = true
     }
     
-    func fetchDevicesForPreview() {
+    func submitScans() {
+        processScannedInput()
+        guard !scannedTags.isEmpty else { return }
+        
+        sessionStartTime = Date()
+        validationError = ""
+        step = .review
+        retryValidation()
+    }
+    
+    func retryValidation() {
         isFetchingDevices = true
         Task {
             do {
-                // Fetch device details for all scanned tags
-                let tagsString = scannedTags.joined(separator: ",")
-                let response = try await APIService.shared.searchDevices(tags: tagsString)
+                let response = try await APIService.shared.validateDevices(assetTags: scannedTags)
+                validatedDevices = response.found ?? []
+                notFoundTags = response.notFound ?? []
                 
-                var foundDevices: [CheckInPreviewItem] = []
-                var notFound: [String] = []
-                
-                let devicesByTag = Dictionary(grouping: response.devices ?? [], by: { $0.assetTag })
-                
-                for tag in scannedTags {
-                    if let device = devicesByTag[tag]?.first {
-                        // Find the matching Location object for assigned location
-                        let assignedLoc: Location? = {
-                            if let alId = device.assignedLocationId {
-                                return appState.locations.first(where: { $0.id == alId })
-                            }
-                            return nil
-                        }()
-                        
-                        foundDevices.append(CheckInPreviewItem(
-                            assetTag: device.assetTag,
-                            category: device.category,
-                            model: device.model,
-                            currentLocationName: device.locationName ?? "Unknown",
-                            assignedLocation: assignedLoc,
-                            assignedLocationName: device.assignedLocationName ?? "Not Set",
-                            deviceId: device.id
-                        ))
-                    } else {
-                        notFound.append(tag)
-                    }
+                // If ALL devices are found, skip review and go straight to preview
+                if notFoundTags.isEmpty && !validatedDevices.isEmpty {
+                    proceedToPreview()
                 }
-                
-                previewDevices = foundDevices
-                notFoundTags = notFound
-                step = .preview
+                // Otherwise stay on review step — user sees found + not-found
                 
             } catch {
-                ToastManager.shared.error("Fetch Failed", detail: "Could not retrieve device details: \(error.localizedDescription)")
+                validationError = "Could not validate devices: \(error.localizedDescription)"
+                ToastManager.shared.error("Validation Failed", detail: error.localizedDescription)
             }
             isFetchingDevices = false
         }
+    }
+    
+    func skipUnknownAndProceed() {
+        // Save the not-found tags for session logging
+        skippedNotFoundTags = notFoundTags
+        notFoundTags = []
+        
+        if validatedDevices.isEmpty {
+            ToastManager.shared.warning("No Valid Devices", detail: "All scanned tags were unknown. Nothing to check in.")
+        } else {
+            ToastManager.shared.info("Skipped \(skippedNotFoundTags.count) Unknown", detail: "Proceeding with \(validatedDevices.count) valid device(s).")
+            proceedToPreview()
+        }
+    }
+    
+    func proceedToPreview() {
+        // Build preview items from validated devices
+        var items: [CheckInPreviewItem] = []
+        
+        for device in validatedDevices {
+            // Find the matching Location object for assigned location
+            let assignedLoc: Location? = {
+                if let name = device.assignedLocationName {
+                    return appState.locations.first(where: { $0.name == name })
+                }
+                return nil
+            }()
+            
+            items.append(CheckInPreviewItem(
+                assetTag: device.assetTag,
+                category: device.category,
+                model: device.model,
+                currentLocationName: device.locationName ?? "Unknown",
+                assignedLocation: assignedLoc,
+                assignedLocationName: device.assignedLocationName ?? "Not Set",
+                deviceId: device.id
+            ))
+        }
+        
+        previewDevices = items
+        step = .preview
     }
     
     func applyOverrideAll() {
@@ -777,8 +1009,8 @@ struct CheckInView: View {
                     }
                 }
                 
-                // Add not-found tags from the initial scan
-                for tag in notFoundTags {
+                // Add skipped not-found tags to the session log
+                for tag in skippedNotFoundTags {
                     allEntries.append(ScanSessionEntry(
                         assetTag: tag,
                         status: .notFound,
@@ -786,7 +1018,7 @@ struct CheckInView: View {
                         model: nil,
                         location: nil,
                         assignedTo: nil,
-                        notes: "Device not found in inventory",
+                        notes: "Skipped — not found in system (possible accidental scan)",
                         timestamp: now
                     ))
                 }
@@ -828,8 +1060,11 @@ struct CheckInView: View {
         scannedTags.removeAll()
         scanText = ""
         notes = ""
-        previewDevices.removeAll()
+        validatedDevices.removeAll()
         notFoundTags.removeAll()
+        skippedNotFoundTags.removeAll()
+        validationError = ""
+        previewDevices.removeAll()
         showOverrideAll = false
         overrideAllLocation = nil
         newOverrideLocationName = ""

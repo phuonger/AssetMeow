@@ -8,6 +8,7 @@ class AppState: ObservableObject {
     @Published var locations: [Location] = []
     @Published var people: [Person] = []
     @Published var isConnected = false
+    @Published var isNetworkActive = false
     @Published var statusMessage = ""
     @Published var isLoading = false
     
@@ -99,6 +100,7 @@ class AppState: ObservableObject {
     
     // MARK: - Data Loading
     func loadInitialData(selectEventId: Int? = nil) async {
+        isNetworkActive = true
         do {
             let eventsResp = try await api.getEvents()
             events = eventsResp.events
@@ -115,6 +117,7 @@ class AppState: ObservableObject {
             statusMessage = "Not connected: \(error.localizedDescription)"
             toast.error("Connection Failed", detail: "Unable to load data from server.")
         }
+        isNetworkActive = false
     }
     
     func loadLocationsAndPeople() async {
@@ -270,6 +273,7 @@ class AppState: ObservableObject {
     // MARK: - Connection Test
     func testConnection() async {
         isLoading = true
+        isNetworkActive = true
         do {
             let _ = try await api.testConnection()
             isConnected = true
@@ -282,5 +286,6 @@ class AppState: ObservableObject {
             toast.error("Connection Failed", detail: error.localizedDescription)
         }
         isLoading = false
+        isNetworkActive = false
     }
 }

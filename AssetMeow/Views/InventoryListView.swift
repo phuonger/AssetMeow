@@ -22,6 +22,8 @@ struct InventoryListView: View {
     @State private var selectedDeviceIds: Set<Int> = []
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
+    @State private var deleteProgress = 0
+    @State private var deleteTotal = 0
     @State private var deleteResult = ""
     @State private var showDeleteResult = false
     
@@ -149,17 +151,25 @@ struct InventoryListView: View {
                         
                         Button(action: { showDeleteConfirmation = true }) {
                             HStack(spacing: 4) {
-                                Image(systemName: "trash.fill")
-                                Text("Delete Selected")
+                                if isDeleting {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.6)
+                                    Text("Deleting \(deleteProgress)/\(deleteTotal)...")
+                                } else {
+                                    Image(systemName: "trash.fill")
+                                    Text("Delete Selected")
+                                }
                             }
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(AppTheme.statusMissing)
+                            .background(isDeleting ? AppTheme.textMuted : AppTheme.statusMissing)
                             .cornerRadius(6)
                         }
                         .buttonStyle(.plain)
+                        .disabled(isDeleting)
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
@@ -645,28 +655,74 @@ struct InventoryListView: View {
     func performBulkDelete() {
         isDeleting = true
         let idsToDelete = Array(selectedDeviceIds)
+        deleteTotal = idsToDelete.count
+        deleteProgress = 0
+        
+        ToastManager.shared.info("Deleting...", detail: "Deleting \(idsToDelete.count) devices. Please wait.")
         
         Task {
             var successCount = 0
             var failCount = 0
+            var alreadyDeletedCount = 0
             
-            for id in idsToDelete {
-                do {
-                    let _ = try await APIService.shared.deleteDevice(id: id)
-                    successCount += 1
-                } catch {
-                    failCount += 1
+            // Process in batches of 10 for better performance
+            let batchSize = 10
+            for batchStart in stride(from: 0, to: idsToDelete.count, by: batchSize) {
+                let batchEnd = min(batchStart + batchSize, idsToDelete.count)
+                let batch = Array(idsToDelete[batchStart..<batchEnd])
+                
+                await withTaskGroup(of: (Int, Bool, Bool).self) { group in
+                    for id in batch {
+                        group.addTask {
+                            do {
+                                let _ = try await APIService.shared.deleteDevice(id: id)
+                                return (id, true, false)
+                            } catch let error as APIError {
+                                // Treat 404/already-deleted as success
+                                switch error {
+                                case .serverError(let msg) where msg.contains("not found") || msg.contains("404"):
+                                    return (id, true, true)
+                                default:
+                                    return (id, false, false)
+                                }
+                            } catch {
+                                return (id, false, false)
+                            }
+                        }
+                    }
+                    
+                    for await (_, success, wasAlreadyDeleted) in group {
+                        if success {
+                            successCount += 1
+                            if wasAlreadyDeleted { alreadyDeletedCount += 1 }
+                        } else {
+                            failCount += 1
+                        }
+                    }
+                }
+                
+                // Update progress on main thread
+                await MainActor.run {
+                    deleteProgress = batchEnd
                 }
             }
             
             await MainActor.run {
                 selectedDeviceIds.removeAll()
                 isDeleting = false
+                deleteProgress = 0
+                deleteTotal = 0
                 
                 if failCount == 0 {
-                    deleteResult = "Successfully deleted \(successCount) devices."
+                    if alreadyDeletedCount > 0 {
+                        deleteResult = "Successfully deleted \(successCount) devices (\(alreadyDeletedCount) were already removed)."
+                    } else {
+                        deleteResult = "Successfully deleted \(successCount) devices."
+                    }
+                    ToastManager.shared.success("Delete Complete", detail: deleteResult)
                 } else {
-                    deleteResult = "Deleted \(successCount) devices. \(failCount) failed."
+                    deleteResult = "Deleted \(successCount) devices. \(failCount) failed (may be network issues)."
+                    ToastManager.shared.warning("Delete Partial", detail: deleteResult)
                 }
                 showDeleteResult = true
                 loadDevices()

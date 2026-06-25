@@ -270,14 +270,21 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
                 
-                // Connection status
+                // Connection status with activity indicator
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(appState.isConnected ? AppTheme.statusAvailable : AppTheme.statusMissing)
-                        .frame(width: 6, height: 6)
-                    Text(appState.isConnected ? "Connected" : "Offline")
+                    if appState.isNetworkActive {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.primaryPurpleLight))
+                            .scaleEffect(0.5)
+                            .frame(width: 6, height: 6)
+                    } else {
+                        Circle()
+                            .fill(appState.isConnected ? AppTheme.statusAvailable : AppTheme.statusMissing)
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(appState.isNetworkActive ? "Syncing..." : (appState.isConnected ? "Connected" : "Offline"))
                         .font(.system(size: 10))
-                        .foregroundColor(AppTheme.textMuted)
+                        .foregroundColor(appState.isNetworkActive ? AppTheme.primaryPurpleLight : AppTheme.textMuted)
                     Spacer()
                 }
                 .padding(.horizontal, 16)
