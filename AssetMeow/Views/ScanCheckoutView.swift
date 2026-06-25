@@ -141,66 +141,137 @@ struct ScanCheckoutView: View {
                 Text("Scan Barcodes to Check Out")
                     .font(AppTheme.headingFont)
                     .foregroundColor(AppTheme.textPrimary)
-                Text("Scan with your Zebra scanner (TAB-separated) or paste asset tags, one per line.")
+                Text("Scan or type an asset tag and press Enter to add it to the list.")
                     .font(AppTheme.captionFont)
                     .foregroundColor(AppTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
             
-            // Scan area
+            // Single-line scan input
             VStack(alignment: .leading, spacing: 8) {
-                Text("Scan Area")
-                    .font(AppTheme.subheadingFont)
-                    .foregroundColor(AppTheme.textPrimary)
-                
-                TextEditor(text: $scanText)
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundColor(AppTheme.textPrimary)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 180, maxHeight: 300)
-                    .padding(12)
-                    .background(AppTheme.backgroundDark)
-                    .cornerRadius(AppTheme.cornerRadius)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                            .stroke(AppTheme.surfaceBorder, lineWidth: 1)
-                    )
-                    .focused($scanFieldFocused)
+                HStack(spacing: 12) {
+                    Image(systemName: "barcode.viewfinder")
+                        .font(.system(size: 18))
+                        .foregroundColor(AppTheme.accentCyan)
+                    
+                    TextField("Scan or type asset tag...", text: $scanText)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(AppTheme.textPrimary)
+                        .textFieldStyle(.plain)
+                        .focused($scanFieldFocused)
+                        .onSubmit {
+                            addScannedTag()
+                        }
+                        .onChange(of: scanText) { newValue in
+                            // Handle TAB-separated or newline-pasted input
+                            let separators = CharacterSet.newlines.union(CharacterSet(charactersIn: "\t"))
+                            if newValue.rangeOfCharacter(from: separators) != nil {
+                                addScannedTag()
+                            }
+                        }
+                    
+                    if !scanText.isEmpty {
+                        Button(action: { addScannedTag() }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(AppTheme.statusAvailable)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+                .background(AppTheme.backgroundDark)
+                .cornerRadius(AppTheme.cornerRadius)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                        .stroke(scanFieldFocused ? AppTheme.accentCyan.opacity(0.5) : AppTheme.surfaceBorder, lineWidth: 1)
+                )
             }
             .padding(.horizontal, 40)
             
-            Text("Each barcode scan adds a new line (TAB = new line). You can also paste or type asset tags.")
-                .font(AppTheme.captionFont)
-                .foregroundColor(AppTheme.textMuted)
+            // Confirmed tags list
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("\(scannedTags.count) items scanned")
+                        .font(AppTheme.subheadingFont)
+                        .foregroundColor(AppTheme.textPrimary)
+                    Spacer()
+                    if !scannedTags.isEmpty {
+                        Button(action: { scannedTags.removeAll() }) {
+                            Text("Clear All")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.statusMissing)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                
+                if scannedTags.isEmpty {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 8) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 24))
+                                .foregroundColor(AppTheme.textMuted.opacity(0.5))
+                            Text("No items scanned yet")
+                                .font(AppTheme.captionFont)
+                                .foregroundColor(AppTheme.textMuted)
+                        }
+                        .padding(.vertical, 20)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(scannedTags.enumerated()), id: \.offset) { index, tag in
+                                HStack {
+                                    Text("\(index + 1).")
+                                        .font(AppTheme.captionFont)
+                                        .foregroundColor(AppTheme.textMuted)
+                                        .frame(width: 30, alignment: .trailing)
+                                    CopyableAssetTag(assetTag: tag)
+                                    Spacer()
+                                    Button(action: { scannedTags.remove(at: index) }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusMissing.opacity(0.7))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 180)
+                }
+            }
+            .padding(10)
+            .background(AppTheme.backgroundDark)
+            .cornerRadius(AppTheme.cornerRadius)
+            .padding(.horizontal, 40)
             
             Spacer()
             
             // Bottom buttons
             HStack {
-                Button(action: parseInput) {
-                    Text("Parse Input")
-                        .secondaryButton()
-                }
-                .buttonStyle(.plain)
-                .disabled(scanText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                
                 Spacer()
                 
-                if !scannedTags.isEmpty {
-                    Text("\(scannedTags.count) tags parsed")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.accentCyan)
-                }
-                
                 Button(action: submitScans) {
-                    Text("Submit")
-                        .primaryButton()
+                    HStack(spacing: 6) {
+                        if isProcessing {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.7)
+                        }
+                        Text("Submit\(scannedTags.count > 0 ? " (\(scannedTags.count) items)" : "")")
+                    }
+                    .primaryButton()
                 }
                 .buttonStyle(.plain)
-                .disabled(scanText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && scannedTags.isEmpty)
-                .keyboardShortcut(.return, modifiers: [])
+                .disabled(scannedTags.isEmpty || isProcessing)
             }
             .padding(20)
+        }
+        .onAppear {
+            scanFieldFocused = true
         }
     }
     
@@ -972,7 +1043,7 @@ struct ScanCheckoutView: View {
     
     // MARK: - Actions
     
-    func parseInput() {
+    func addScannedTag() {
         let separators = CharacterSet.newlines.union(CharacterSet(charactersIn: "\t"))
         let tags = scanText.components(separatedBy: separators)
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -985,6 +1056,10 @@ struct ScanCheckoutView: View {
         }
         scanText = ""
         scanFieldFocused = true
+    }
+    
+    func parseInput() {
+        addScannedTag()
     }
     
     func submitScans() {
