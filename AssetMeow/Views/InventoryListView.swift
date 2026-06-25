@@ -1471,7 +1471,7 @@ struct AddDeviceSheet: View {
         Task {
             do {
                 let _ = try await APIService.shared.createDevice(deviceData)
-                ToastNotification.show("Asset \(tag) created successfully", type: .success)
+                ToastManager.shared.success("Asset \(tag) created successfully")
                 onSave()
                 dismiss()
             } catch let error as APIError {
