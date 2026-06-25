@@ -412,10 +412,11 @@ struct QuickLookupView: View {
                     .foregroundColor(AppTheme.textPrimary)
                 
                 ForEach(activity, id: \.id) { entry in
-                    HStack {
+                    HStack(alignment: .top) {
                         Image(systemName: activityIcon(entry.action ?? ""))
                             .foregroundColor(AppTheme.primaryPurpleLight)
                             .frame(width: 20)
+                            .padding(.top, 2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.action ?? "")
                                 .font(AppTheme.captionFont)
@@ -429,6 +430,17 @@ struct QuickLookupView: View {
                                 Text("→ \(tp)")
                                     .font(.system(size: 10))
                                     .foregroundColor(AppTheme.textMuted)
+                            }
+                            if let notes = entry.notes, !notes.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "note.text")
+                                        .font(.system(size: 9))
+                                    Text(notes)
+                                        .font(.system(size: 10))
+                                        .lineLimit(2)
+                                }
+                                .foregroundColor(AppTheme.textSecondary)
+                                .padding(.top, 1)
                             }
                         }
                         Spacer()
