@@ -38,6 +38,9 @@ struct CheckInView: View {
     @State private var sessionLog: ScanSessionLog?
     @State private var sessionStartTime = Date()
     
+    // Confirmation dialog
+    @State private var showConfirmBack = false
+    
     @FocusState private var scanFieldFocused: Bool
     
     var body: some View {
@@ -427,9 +430,27 @@ struct CheckInView: View {
                 
                 // Bottom buttons
                 HStack {
-                    Button(action: { backToScan() }) {
+                    Button(action: { showConfirmBack = true }) {
                         Text("Back to Scan")
                             .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    .alert("Go Back to Scan?", isPresented: $showConfirmBack) {
+                        Button("Cancel", role: .cancel) { }
+                        Button("Go Back", role: .destructive) {
+                            backToScan()
+                        }
+                    } message: {
+                        Text("Going back will clear all scanned devices from the list. Use 'Add More Devices' instead if you want to scan additional items.")
+                    }
+                    
+                    Button(action: { addMoreDevices() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 10))
+                            Text("Add More Devices")
+                        }
+                        .secondaryButton()
                     }
                     .buttonStyle(.plain)
                     
@@ -1221,6 +1242,19 @@ struct CheckInView: View {
         step = .scan
         scanText = ""
         scannedTags.removeAll()
+        validatedDevices.removeAll()
+        notFoundTags.removeAll()
+        skippedNotFoundTags.removeAll()
+        validationError = ""
+        previewDevices.removeAll()
+        isProcessing = false
+        scanFieldFocused = true
+    }
+    
+    func addMoreDevices() {
+        // Go back to scan step but PRESERVE the existing scannedTags list
+        step = .scan
+        scanText = ""
         validatedDevices.removeAll()
         notFoundTags.removeAll()
         skippedNotFoundTags.removeAll()

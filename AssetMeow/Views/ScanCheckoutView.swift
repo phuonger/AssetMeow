@@ -46,6 +46,9 @@ struct ScanCheckoutView: View {
     // Track skipped tags for session log
     @State private var skippedNotFoundTags: [String] = []
     
+    // Confirmation dialog
+    @State private var showConfirmBack = false
+    
     @FocusState private var scanFieldFocused: Bool
     
     var body: some View {
@@ -483,9 +486,27 @@ struct ScanCheckoutView: View {
                 
                 // Bottom buttons
                 HStack {
-                    Button(action: { backToScan() }) {
+                    Button(action: { showConfirmBack = true }) {
                         Text("Back to Scan")
                             .secondaryButton()
+                    }
+                    .buttonStyle(.plain)
+                    .alert("Go Back to Scan?", isPresented: $showConfirmBack) {
+                        Button("Cancel", role: .cancel) { }
+                        Button("Go Back", role: .destructive) {
+                            backToScan()
+                        }
+                    } message: {
+                        Text("Going back will clear all scanned devices from the list. Use 'Add More Devices' instead if you want to scan additional items.")
+                    }
+                    
+                    Button(action: { addMoreDevices() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 10))
+                            Text("Add More Devices")
+                        }
+                        .secondaryButton()
                     }
                     .buttonStyle(.plain)
                     
@@ -1278,6 +1299,19 @@ struct ScanCheckoutView: View {
         step = .scan
         scanText = ""
         scannedTags = []
+        foundDevices = []
+        notFoundTags = []
+        newDeviceEntries = []
+        skippedNotFoundTags = []
+        validationError = ""
+        isProcessing = false
+        scanFieldFocused = true
+    }
+    
+    func addMoreDevices() {
+        // Go back to scan step but PRESERVE the existing scannedTags list
+        step = .scan
+        scanText = ""
         foundDevices = []
         notFoundTags = []
         newDeviceEntries = []
