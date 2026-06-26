@@ -235,18 +235,22 @@ struct ActivityLogView: View {
                     }
                     Spacer()
                 } else {
-                    // Table header
-                    tableHeaderView
-                    
-                    // Table rows
-                    ScrollView {
-                        LazyVStack(spacing: 1) {
-                            ForEach(filteredActivities, id: \.id) { entry in
-                                activityRow(entry)
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(spacing: 0) {
+                            // Table header
+                            tableHeaderView
+                            
+                            // Table rows
+                            ScrollView {
+                                LazyVStack(spacing: 1) {
+                                    ForEach(filteredActivities, id: \.id) { entry in
+                                        activityRow(entry)
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
                     }
                 }
             }
@@ -421,8 +425,13 @@ struct ActivityLogView: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(AppTheme.textSecondary)
                             .lineLimit(1)
+                    } else if entry.fromLocation == nil, let current = entry.currentLocation {
+                        Text(current)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(AppTheme.textSecondary)
+                            .lineLimit(1)
                     }
-                    if entry.fromLocation == nil && entry.toLocation == nil {
+                    if entry.fromLocation == nil && entry.toLocation == nil && entry.currentLocation == nil {
                         Text("—")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
@@ -450,8 +459,13 @@ struct ActivityLogView: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(AppTheme.accentCyan)
                             .lineLimit(1)
+                    } else if entry.fromPerson == nil, let current = entry.currentPerson {
+                        Text(current)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(AppTheme.accentCyan)
+                            .lineLimit(1)
                     }
-                    if entry.fromPerson == nil && entry.toPerson == nil {
+                    if entry.fromPerson == nil && entry.toPerson == nil && entry.currentPerson == nil {
                         Text("—")
                             .font(.system(size: 10))
                             .foregroundColor(AppTheme.textMuted)
