@@ -485,51 +485,57 @@ struct InventoryListView: View {
                     }
                     Spacer()
                 } else {
-                    // Header row
-                    HStack(spacing: 0) {
-                        if isMultiSelectMode {
-                            Button(action: toggleSelectAll) {
-                                Image(systemName: allFilteredSelected ? "checkmark.square.fill" : "square")
-                                    .foregroundColor(allFilteredSelected ? AppTheme.primaryPurple : AppTheme.textMuted)
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(spacing: 0) {
+                            // Header row
+                            HStack(spacing: 0) {
+                                if isMultiSelectMode {
+                                    Button(action: toggleSelectAll) {
+                                        Image(systemName: allFilteredSelected ? "checkmark.square.fill" : "square")
+                                            .foregroundColor(allFilteredSelected ? AppTheme.primaryPurple : AppTheme.textMuted)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(width: 30)
+                                }
+                                Text("Asset Tag")
+                                    .frame(width: 140, alignment: .leading)
+                                Text("Category")
+                                    .frame(width: 80, alignment: .leading)
+                                Text("Model")
+                                    .frame(width: 110, alignment: .leading)
+                                Text("SKU")
+                                    .frame(width: 110, alignment: .leading)
+                                Text("Account")
+                                    .frame(width: 90, alignment: .leading)
+                                Text("Status")
+                                    .frame(width: 100, alignment: .leading)
+                                Text("Current Loc.")
+                                    .frame(width: 120, alignment: .leading)
+                                Text("Assigned Loc.")
+                                    .frame(width: 120, alignment: .leading)
+                                Text("Assigned To")
+                                    .frame(width: 110, alignment: .leading)
+                                Text("Last Scanned")
+                                    .frame(width: 130, alignment: .leading)
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
-                            .frame(width: 30)
-                        }
-                        Text("Asset Tag")
-                            .frame(width: 140, alignment: .leading)
-                        Text("Category")
-                            .frame(width: 80, alignment: .leading)
-                        Text("Model")
-                            .frame(width: 110, alignment: .leading)
-                        Text("SKU")
-                            .frame(width: 110, alignment: .leading)
-                        Text("Status")
-                            .frame(width: 100, alignment: .leading)
-                        Text("Current Loc.")
-                            .frame(width: 120, alignment: .leading)
-                        Text("Assigned Loc.")
-                            .frame(width: 120, alignment: .leading)
-                        Text("Assigned To")
-                            .frame(width: 110, alignment: .leading)
-                        Text("Last Scanned")
-                            .frame(width: 130, alignment: .leading)
-                        Spacer()
-                    }
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(AppTheme.textMuted)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.backgroundDark)
-                    
-                    Rectangle()
-                        .fill(AppTheme.surfaceBorder)
-                        .frame(height: 1)
-                    
-                    // Device list
-                    ScrollView {
-                        LazyVStack(spacing: 1) {
-                            ForEach(filteredDevices, id: \.assetTag) { device in
-                                deviceRow(device)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(AppTheme.textMuted)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .background(AppTheme.backgroundDark)
+                            
+                            Rectangle()
+                                .fill(AppTheme.surfaceBorder)
+                                .frame(height: 1)
+                            
+                            // Device list
+                            ScrollView {
+                                LazyVStack(spacing: 1) {
+                                    ForEach(filteredDevices, id: \.assetTag) { device in
+                                        deviceRow(device)
+                                    }
+                                }
                             }
                         }
                     }
@@ -600,6 +606,10 @@ struct InventoryListView: View {
                 .frame(width: 110, alignment: .leading)
             CopyableText(text: device.sku ?? "—")
                 .frame(width: 110, alignment: .leading)
+            Text(device.account ?? "—")
+                .font(AppTheme.captionFont)
+                .foregroundColor(AppTheme.textSecondary)
+                .frame(width: 90, alignment: .leading)
             Text(device.status.rawValue)
                 .font(.system(size: 11, weight: .semibold))
                 .padding(.horizontal, 6)
