@@ -9,6 +9,9 @@ struct ActivityLogView: View {
     @State private var limit = 100
     @State private var showColumnSettings = false
     @State private var isExporting = false
+    @State private var selectedEntryIds: Set<Int> = []
+    @State private var isSelectMode = false
+    @State private var showCopiedToast = false
     
     // Column visibility settings (persisted via AppStorage)
     @AppStorage("activityLog_showCategory") private var showCategory = true
@@ -170,6 +173,41 @@ struct ActivityLogView: View {
                     }
                     .buttonStyle(.plain)
                     
+                    // Select mode toggle
+                    Button(action: {
+                        isSelectMode.toggle()
+                        if !isSelectMode { selectedEntryIds.removeAll() }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: isSelectMode ? "checkmark.circle.fill" : "checkmark.circle")
+                            Text(isSelectMode ? "\(selectedEntryIds.count) selected" : "Select")
+                        }
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(isSelectMode ? AppTheme.statusAvailable : AppTheme.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(isSelectMode ? AppTheme.statusAvailable.opacity(0.1) : AppTheme.backgroundDark)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Copy asset tags button (visible in select mode)
+                    if isSelectMode && !selectedEntryIds.isEmpty {
+                        Button(action: copySelectedAssetTags) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.doc")
+                                Text("Copy Tags")
+                            }
+                            .font(AppTheme.captionFont)
+                            .foregroundColor(AppTheme.accentCyan)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(AppTheme.accentCyan.opacity(0.1))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
                     // Export CSV
                     Button(action: exportCSV) {
                         HStack(spacing: 4) {
@@ -259,6 +297,24 @@ struct ActivityLogView: View {
             }
         }
         .onAppear { loadActivity() }
+        .overlay(alignment: .top) {
+            if showCopiedToast {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.on.doc.fill")
+                    Text("Asset tags copied to clipboard!")
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(AppTheme.statusAvailable.opacity(0.9))
+                .cornerRadius(8)
+                .shadow(radius: 4)
+                .padding(.top, 60)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut(duration: 0.3), value: showCopiedToast)
+            }
+        }
     }
     
     // MARK: - Column Settings Panel
@@ -303,6 +359,21 @@ struct ActivityLogView: View {
     // MARK: - Table Header
     var tableHeaderView: some View {
         HStack(spacing: 0) {
+            if isSelectMode {
+                Button(action: {
+                    if selectedEntryIds.count == filteredActivities.count {
+                        selectedEntryIds.removeAll()
+                    } else {
+                        selectedEntryIds = Set(filteredActivities.compactMap { $0.id })
+                    }
+                }) {
+                    Image(systemName: selectedEntryIds.count == filteredActivities.count ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppTheme.primaryPurpleLight)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28)
+            }
             Text("Action")
                 .frame(width: 90, alignment: .leading)
             Text("Asset Tag")
@@ -352,6 +423,25 @@ struct ActivityLogView: View {
     // MARK: - Activity Row
     func activityRow(_ entry: ActivityEntry) -> some View {
         HStack(spacing: 0) {
+            // Selection checkbox
+            if isSelectMode {
+                Button(action: {
+                    if let id = entry.id {
+                        if selectedEntryIds.contains(id) {
+                            selectedEntryIds.remove(id)
+                        } else {
+                            selectedEntryIds.insert(id)
+                        }
+                    }
+                }) {
+                    Image(systemName: (entry.id != nil && selectedEntryIds.contains(entry.id!)) ? "checkmark.square.fill" : "square")
+                        .font(.system(size: 11))
+                        .foregroundColor((entry.id != nil && selectedEntryIds.contains(entry.id!)) ? AppTheme.statusAvailable : AppTheme.textMuted)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28)
+            }
+            
             // Action badge
             HStack(spacing: 4) {
                 Circle()
@@ -506,6 +596,26 @@ struct ActivityLogView: View {
         .padding(.vertical, 7)
         .background(AppTheme.backgroundDark)
         .cornerRadius(4)
+    }
+    
+    // MARK: - Selection & Copy
+    
+    func copySelectedAssetTags() {
+        let tags = filteredActivities
+            .filter { $0.id != nil && selectedEntryIds.contains($0.id!) }
+            .compactMap { $0.assetTag }
+            .filter { !$0.isEmpty }
+        
+        let uniqueTags = Array(Set(tags)).sorted()
+        let joined = uniqueTags.joined(separator: "\n")
+        
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(joined, forType: .string)
+        
+        showCopiedToast = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            showCopiedToast = false
+        }
     }
     
     // MARK: - Helpers

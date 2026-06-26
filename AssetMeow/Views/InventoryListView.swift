@@ -579,9 +579,9 @@ struct InventoryListView: View {
             .environmentObject(appState)
         }
         .sheet(isPresented: $showAddDevice) {
-            AddDeviceSheet {
+            AddDeviceSheet(onSave: {
                 loadDevices()
-            }
+            }, existingDevices: devices)
             .environmentObject(appState)
         }
         .alert("Delete \(selectedDeviceIds.count) Devices?", isPresented: $showDeleteConfirmation) {
@@ -1218,12 +1218,14 @@ struct AddDeviceSheet: View {
     @Environment(\.dismiss) var dismiss
     
     let onSave: () -> Void
+    let existingDevices: [Device]
     
     @State private var assetTag = ""
     @State private var category = ""
     @State private var model = ""
     @State private var sku = ""
     @State private var status: DeviceStatus = .available
+    @State private var selectedEvent: Event?
     @State private var selectedLocation: Location?
     @State private var selectedAssignedLocation: Location?
     @State private var selectedPerson: Person?
@@ -1235,6 +1237,22 @@ struct AddDeviceSheet: View {
     @State private var newCustomFieldValue = ""
     @State private var isSaving = false
     @State private var errorMessage = ""
+    @State private var isAddingNewCategory = false
+    @State private var isAddingNewModel = false
+    @State private var isAddingNewSku = false
+    @State private var newCategoryText = ""
+    @State private var newModelText = ""
+    @State private var newSkuText = ""
+    
+    var availableCategories: [String] {
+        Array(Set(existingDevices.compactMap { $0.category }.filter { !$0.isEmpty })).sorted()
+    }
+    var availableModels: [String] {
+        Array(Set(existingDevices.compactMap { $0.model }.filter { !$0.isEmpty })).sorted()
+    }
+    var availableSkus: [String] {
+        Array(Set(existingDevices.compactMap { $0.sku }.filter { !$0.isEmpty })).sorted()
+    }
     
     var body: some View {
         ZStack {
@@ -1284,9 +1302,146 @@ struct AddDeviceSheet: View {
                                 .font(AppTheme.subheadingFont)
                                 .foregroundColor(AppTheme.textPrimary)
                             
-                            addFieldRow("Category", $category)
-                            addFieldRow("Model", $model)
-                            addFieldRow("SKU / Style", $sku)
+                            // Event picker
+                            HStack {
+                                Text("Event")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("", selection: $selectedEvent) {
+                                    Text("-- None --").tag(nil as Event?)
+                                    ForEach(appState.events, id: \.id) { event in
+                                        Text(event.name).tag(Optional(event))
+                                    }
+                                }
+                                .frame(width: 180)
+                            }
+                            
+                            // Category picker with + New
+                            HStack {
+                                Text("Category")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                if isAddingNewCategory {
+                                    TextField("New category", text: $newCategoryText)
+                                        .darkTextField()
+                                        .frame(width: 150)
+                                    Button(action: {
+                                        category = newCategoryText
+                                        isAddingNewCategory = false
+                                        newCategoryText = ""
+                                    }) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusAvailable)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(newCategoryText.isEmpty)
+                                    Button(action: { isAddingNewCategory = false; newCategoryText = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusMissing)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Picker("", selection: $category) {
+                                        Text("-- Select --").tag("")
+                                        ForEach(availableCategories, id: \.self) { cat in
+                                            Text(cat).tag(cat)
+                                        }
+                                    }
+                                    .frame(width: 150)
+                                    Button(action: { isAddingNewCategory = true }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(AppTheme.accentColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Add new category")
+                                }
+                            }
+                            
+                            // Model picker with + New
+                            HStack {
+                                Text("Model")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                if isAddingNewModel {
+                                    TextField("New model", text: $newModelText)
+                                        .darkTextField()
+                                        .frame(width: 150)
+                                    Button(action: {
+                                        model = newModelText
+                                        isAddingNewModel = false
+                                        newModelText = ""
+                                    }) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusAvailable)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(newModelText.isEmpty)
+                                    Button(action: { isAddingNewModel = false; newModelText = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusMissing)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Picker("", selection: $model) {
+                                        Text("-- Select --").tag("")
+                                        ForEach(availableModels, id: \.self) { m in
+                                            Text(m).tag(m)
+                                        }
+                                    }
+                                    .frame(width: 150)
+                                    Button(action: { isAddingNewModel = true }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(AppTheme.accentColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Add new model")
+                                }
+                            }
+                            
+                            // SKU picker with + New
+                            HStack {
+                                Text("SKU / Style")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                    .frame(width: 100, alignment: .trailing)
+                                if isAddingNewSku {
+                                    TextField("New SKU", text: $newSkuText)
+                                        .darkTextField()
+                                        .frame(width: 150)
+                                    Button(action: {
+                                        sku = newSkuText
+                                        isAddingNewSku = false
+                                        newSkuText = ""
+                                    }) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusAvailable)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(newSkuText.isEmpty)
+                                    Button(action: { isAddingNewSku = false; newSkuText = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(AppTheme.statusMissing)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    Picker("", selection: $sku) {
+                                        Text("-- Select --").tag("")
+                                        ForEach(availableSkus, id: \.self) { s in
+                                            Text(s).tag(s)
+                                        }
+                                    }
+                                    .frame(width: 150)
+                                    Button(action: { isAddingNewSku = true }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(AppTheme.accentColor)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Add new SKU")
+                                }
+                            }
                             
                             HStack {
                                 Text("Status")
@@ -1448,7 +1603,12 @@ struct AddDeviceSheet: View {
                 .padding()
             }
         }
-        .frame(width: 500, height: 600)
+        .frame(width: 520, height: 700)
+        .onAppear {
+            if selectedEvent == nil {
+                selectedEvent = appState.currentEvent
+            }
+        }
     }
     
     func addFieldRow(_ label: String, _ value: Binding<String>) -> some View {
@@ -1483,6 +1643,7 @@ struct AddDeviceSheet: View {
             "live_or_dummy": liveOrDummy,
             "notes": notes
         ]
+        if let eventId = selectedEvent?.id { deviceData["event_id"] = eventId }
         if let locId = selectedLocation?.id { deviceData["location_id"] = locId }
         if let assignedLocId = selectedAssignedLocation?.id { deviceData["assigned_location_id"] = assignedLocId }
         if let personId = selectedPerson?.id { deviceData["assigned_to_id"] = personId }

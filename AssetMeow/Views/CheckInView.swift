@@ -1055,6 +1055,14 @@ struct CheckInView: View {
         isProcessing = true
         Task {
             do {
+                // Auto-apply override if user selected one but forgot to click Apply
+                if let location = overrideAllLocation {
+                    for i in previewDevices.indices {
+                        previewDevices[i].assignedLocation = location
+                        previewDevices[i].assignedLocationName = location.name
+                    }
+                }
+                
                 // Group devices by their target assigned location
                 var groups: [Int?: [CheckInPreviewItem]] = [:]
                 for item in previewDevices {
