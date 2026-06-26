@@ -1352,7 +1352,7 @@ struct AddDeviceSheet: View {
                                     .frame(width: 150)
                                     Button(action: { isAddingNewCategory = true }) {
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(AppTheme.accentColor)
+                                            .foregroundColor(AppTheme.accentCyan)
                                     }
                                     .buttonStyle(.plain)
                                     .help("Add new category")
@@ -1394,7 +1394,7 @@ struct AddDeviceSheet: View {
                                     .frame(width: 150)
                                     Button(action: { isAddingNewModel = true }) {
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(AppTheme.accentColor)
+                                            .foregroundColor(AppTheme.accentCyan)
                                     }
                                     .buttonStyle(.plain)
                                     .help("Add new model")
@@ -1436,7 +1436,7 @@ struct AddDeviceSheet: View {
                                     .frame(width: 150)
                                     Button(action: { isAddingNewSku = true }) {
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(AppTheme.accentColor)
+                                            .foregroundColor(AppTheme.accentCyan)
                                     }
                                     .buttonStyle(.plain)
                                     .help("Add new SKU")
