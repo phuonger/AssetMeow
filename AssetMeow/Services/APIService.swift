@@ -320,6 +320,10 @@ class APIService {
         return try await request("locations", method: "POST", body: body)
     }
     
+    func deleteLocation(id: Int) async throws -> GenericResponse {
+        return try await request("locations", method: "DELETE", queryParams: ["id": "\(id)"])
+    }
+    
     // MARK: - People
     func getPeople(eventId: Int? = nil) async throws -> PeopleResponse {
         var params: [String: String] = [:]
@@ -335,6 +339,10 @@ class APIService {
         return try await request("people", method: "POST", body: body)
     }
     
+    func deletePerson(id: Int) async throws -> GenericResponse {
+        return try await request("people", method: "DELETE", queryParams: ["id": "\(id)"])
+    }
+    
     // MARK: - Events
     func getEvents() async throws -> EventsResponse {
         return try await request("events")
@@ -345,6 +353,10 @@ class APIService {
         if let start = startDate { body["start_date"] = start }
         if let end = endDate { body["end_date"] = end }
         return try await request("events", method: "POST", body: body)
+    }
+    
+    func deleteEvent(id: Int) async throws -> GenericResponse {
+        return try await request("events", method: "DELETE", queryParams: ["id": "\(id)"])
     }
     
     // MARK: - Activity

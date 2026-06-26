@@ -1780,6 +1780,27 @@ function handleEvents($db, $method, $currentUser) {
             
             echo json_encode(['success' => true, 'id' => (int)$db->lastInsertId(), 'name' => $name]);
             break;
+
+        case 'DELETE':
+            $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+            if (!$id) {
+                echo json_encode(['error' => 'Event ID is required']);
+                return;
+            }
+            // Check if event has devices
+            $checkStmt = $db->prepare("SELECT COUNT(*) as cnt FROM devices WHERE event_id = ?");
+            $checkStmt->execute([$id]);
+            $count = (int)$checkStmt->fetch()['cnt'];
+            if ($count > 0) {
+                echo json_encode(['error' => "Cannot delete event with $count device(s). Move or delete devices first."]);
+                return;
+            }
+            // Delete associated locations first
+            $db->prepare("DELETE FROM locations WHERE event_id = ?")->execute([$id]);
+            $db->prepare("DELETE FROM events WHERE id = ?")->execute([$id]);
+            logActivity($db, null, null, 'Event Deleted', null, null, null, null, "Deleted event ID: $id", $currentUser);
+            echo json_encode(['success' => true]);
+            break;
     }
 }
 

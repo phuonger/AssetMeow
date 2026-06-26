@@ -390,6 +390,71 @@ class AppState: ObservableObject {
         return nil
     }
     
+    // MARK: - Delete Event
+    func deleteEvent(id: Int) async -> Bool {
+        guard isConnected else {
+            toast.error("No Connection", detail: "Cannot delete event while offline.")
+            return false
+        }
+        do {
+            let resp = try await api.deleteEvent(id: id)
+            if resp.success == true {
+                events.removeAll { $0.id == id }
+                toast.success("Event Deleted", detail: "Event removed successfully.")
+                return true
+            } else {
+                let errorMsg = resp.error ?? "Unknown error"
+                toast.error("Failed to Delete Event", detail: errorMsg)
+            }
+        } catch {
+            toast.error("Connection Error", detail: "Could not delete event: \(error.localizedDescription)")
+        }
+        return false
+    }
+    
+    // MARK: - Delete Location
+    func deleteLocation(id: Int) async -> Bool {
+        guard isConnected else {
+            toast.error("No Connection", detail: "Cannot delete location while offline.")
+            return false
+        }
+        do {
+            let resp = try await api.deleteLocation(id: id)
+            if resp.success == true {
+                toast.success("Location Deleted", detail: "Location removed successfully.")
+                return true
+            } else {
+                let errorMsg = resp.error ?? "Unknown error"
+                toast.error("Failed to Delete Location", detail: errorMsg)
+            }
+        } catch {
+            toast.error("Connection Error", detail: "Could not delete location: \(error.localizedDescription)")
+        }
+        return false
+    }
+    
+    // MARK: - Delete Person
+    func deletePerson(id: Int) async -> Bool {
+        guard isConnected else {
+            toast.error("No Connection", detail: "Cannot delete person while offline.")
+            return false
+        }
+        do {
+            let resp = try await api.deletePerson(id: id)
+            if resp.success == true {
+                people.removeAll { $0.id == id }
+                toast.success("Person Deleted", detail: "Person removed successfully.")
+                return true
+            } else {
+                let errorMsg = resp.error ?? "Unknown error"
+                toast.error("Failed to Delete Person", detail: errorMsg)
+            }
+        } catch {
+            toast.error("Connection Error", detail: "Could not delete person: \(error.localizedDescription)")
+        }
+        return false
+    }
+    
     // MARK: - Connection Test
     func testConnection() async {
         isLoading = true

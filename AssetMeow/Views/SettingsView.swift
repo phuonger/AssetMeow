@@ -221,39 +221,65 @@ struct EventLocationRow: View {
     @State private var isExpanded = false
     @State private var eventLocations: [Location] = []
     @State private var isLoadingLocations = false
+    @State private var showDeleteEventConfirm = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Event header row
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+            HStack {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                    if isExpanded && eventLocations.isEmpty {
+                        loadLocations()
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(AppTheme.textMuted)
+                            .frame(width: 16)
+                        Image(systemName: "calendar")
+                            .foregroundColor(AppTheme.primaryPurpleLight)
+                            .font(.system(size: 12))
+                        Text(event.name)
+                            .font(AppTheme.bodyFont)
+                            .foregroundColor(AppTheme.textPrimary)
+                        Spacer()
+                        Text("\(event.deviceCount ?? 0) devices")
+                            .font(AppTheme.captionFont)
+                            .foregroundColor(AppTheme.textMuted)
+                    }
+                    .contentShape(Rectangle())
                 }
-                if isExpanded && eventLocations.isEmpty {
-                    loadLocations()
+                .buttonStyle(.plain)
+                
+                // Delete event button (only if 0 devices)
+                if (event.deviceCount ?? 0) == 0 {
+                    Button(action: {
+                        showDeleteEventConfirm = true
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 11))
+                            .foregroundColor(AppTheme.statusMissing.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete event")
                 }
-            }) {
-                HStack {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(AppTheme.textMuted)
-                        .frame(width: 16)
-                    Image(systemName: "calendar")
-                        .foregroundColor(AppTheme.primaryPurpleLight)
-                        .font(.system(size: 12))
-                    Text(event.name)
-                        .font(AppTheme.bodyFont)
-                        .foregroundColor(AppTheme.textPrimary)
-                    Spacer()
-                    Text("\(event.deviceCount ?? 0) devices")
-                        .font(AppTheme.captionFont)
-                        .foregroundColor(AppTheme.textMuted)
-                }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .alert("Delete Event?", isPresented: $showDeleteEventConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        let _ = await appState.deleteEvent(id: event.id)
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete \"\(event.name)\"? This cannot be undone.")
+            }
             
             // Expanded locations list
             if isExpanded {
@@ -281,6 +307,22 @@ struct EventLocationRow: View {
                                 Text("\(loc.deviceCount ?? 0)")
                                     .font(AppTheme.captionFont)
                                     .foregroundColor(AppTheme.textMuted)
+                                // Delete location button (only if 0 devices)
+                                if (loc.deviceCount ?? 0) == 0 {
+                                    Button(action: {
+                                        Task {
+                                            if await appState.deleteLocation(id: loc.id) {
+                                                eventLocations.removeAll { $0.id == loc.id }
+                                            }
+                                        }
+                                    }) {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(AppTheme.statusMissing.opacity(0.6))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Delete location")
+                                }
                             }
                             .padding(.vertical, 3)
                             .padding(.leading, 40)
