@@ -235,6 +235,7 @@ struct ActivityLogView: View {
                     }
                     Spacer()
                 } else {
+                    GeometryReader { geometry in
                     ScrollView(.horizontal, showsIndicators: true) {
                         VStack(spacing: 0) {
                             // Table header
@@ -251,6 +252,8 @@ struct ActivityLogView: View {
                                 .padding(.vertical, 4)
                             }
                         }
+                        .frame(minWidth: geometry.size.width)
+                    }
                     }
                 }
             }

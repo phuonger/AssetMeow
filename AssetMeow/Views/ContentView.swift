@@ -156,7 +156,7 @@ struct ContentView: View {
             sidebarView
                 .layoutPriority(1)
             
-            // Main content area
+            // Main content area - clipped so horizontal scroll stays within bounds
             ZStack {
                 AppTheme.backgroundMedium.ignoresSafeArea()
                 
@@ -196,6 +196,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .clipped()
             .withToastOverlay()
         }
         .frame(minWidth: 1100, minHeight: 700)
