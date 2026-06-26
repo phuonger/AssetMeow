@@ -359,8 +359,10 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
     var sku: String?
     var fromLocation: String?
     var toLocation: String?
+    var currentLocation: String?
     var fromPerson: String?
     var toPerson: String?
+    var currentPerson: String?
     var notes: String?
     var performedBy: String?
     var createdAt: String?
@@ -376,8 +378,10 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
         case sku
         case fromLocation = "from_location"
         case toLocation = "to_location"
+        case currentLocation = "current_location"
         case fromPerson = "from_person"
         case toPerson = "to_person"
+        case currentPerson = "current_person"
         case notes
         case performedBy = "performed_by"
         case createdAt = "created_at"
@@ -419,8 +423,10 @@ struct ActivityEntry: Codable, Identifiable, Hashable {
         }
         fromLocation = try? container.decodeIfPresent(String.self, forKey: .fromLocation)
         toLocation = try? container.decodeIfPresent(String.self, forKey: .toLocation)
+        currentLocation = try? container.decodeIfPresent(String.self, forKey: .currentLocation)
         fromPerson = try? container.decodeIfPresent(String.self, forKey: .fromPerson)
         toPerson = try? container.decodeIfPresent(String.self, forKey: .toPerson)
+        currentPerson = try? container.decodeIfPresent(String.self, forKey: .currentPerson)
         notes = try? container.decodeIfPresent(String.self, forKey: .notes)
         performedBy = try? container.decodeIfPresent(String.self, forKey: .performedBy)
         createdAt = try? container.decodeIfPresent(String.self, forKey: .createdAt)
