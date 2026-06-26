@@ -257,6 +257,11 @@ class APIService {
         return try await request("devices/bulk-move", method: "POST", body: body)
     }
     
+    func logNotFound(assetTags: [String], context: String = "check-in") async throws {
+        let body: [String: Any] = ["asset_tags": assetTags, "context": context]
+        let _: BulkResult = try await request("activity/log-not-found", method: "POST", body: body)
+    }
+    
     func bulkUpdate(assetTags: [String]? = nil, deviceIds: [Int]? = nil, updates: [String: Any]) async throws -> BulkResult {
         var body: [String: Any] = ["updates": updates]
         if let tags = assetTags { body["asset_tags"] = tags }

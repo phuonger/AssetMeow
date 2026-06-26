@@ -204,6 +204,10 @@ switch ($path) {
         handleActivity($db);
         break;
 
+    case 'activity/log-not-found':
+        handleLogNotFound($db, $currentUser);
+        break;
+
     // === DEBUG: Activity Log diagnosis ===
     case 'debug/activity-check':
         handleActivityDebug($db);
@@ -980,6 +984,8 @@ function handleBulkCheckout($db, $currentUser) {
                 $results['checked_out']++;
             } else {
                 $results['not_found'][] = $tag;
+                // Log not-found device to activity log so it appears even without session log download
+                logActivity($db, null, $tag, 'Not Found', null, null, null, null, 'Device scanned during checkout but not found in system', $currentUser);
             }
         }
         $db->commit();
@@ -1032,6 +1038,8 @@ function handleBulkCheckin($db, $currentUser) {
                 $results['checked_in']++;
             } else {
                 $results['not_found'][] = $tag;
+                // Log not-found device to activity log so it appears even without session log download
+                logActivity($db, null, $tag, 'Not Found', null, null, null, null, 'Device scanned during check-in but not found in system', $currentUser);
             }
         }
         $db->commit();
@@ -1933,6 +1941,33 @@ function handleActivity($db) {
             echo json_encode(['activity' => [], 'error' => $e->getMessage() . ' | Fallback: ' . $e2->getMessage(), 'count' => 0]);
         }
     }
+}
+
+// ============================================================
+// LOG NOT FOUND: Record skipped not-found devices to activity log
+// ============================================================
+
+function handleLogNotFound($db, $currentUser) {
+    $data = json_decode(file_get_contents('php://input'), true);
+    $asset_tags = $data['asset_tags'] ?? [];
+    $context = $data['context'] ?? 'check-in'; // 'check-in' or 'checkout'
+    
+    if (empty($asset_tags)) {
+        echo json_encode(['error' => 'No asset tags provided']);
+        return;
+    }
+    
+    $logged = 0;
+    foreach ($asset_tags as $tag) {
+        $tag = trim($tag);
+        if (empty($tag)) continue;
+        
+        $noteMsg = "Device scanned during $context but not found in system (skipped by user)";
+        logActivity($db, null, $tag, 'Not Found', null, null, null, null, $noteMsg, $currentUser);
+        $logged++;
+    }
+    
+    echo json_encode(['success' => true, 'logged' => $logged], JSON_NUMERIC_CHECK);
 }
 
 // ============================================================
