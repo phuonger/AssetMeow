@@ -274,11 +274,13 @@ struct EventLocationRow: View {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
                     Task {
-                        let _ = await appState.deleteEvent(id: event.id)
+                        if let eventId = event.id {
+                            let _ = await appState.deleteEvent(id: eventId)
+                        }
                     }
                 }
             } message: {
-                Text("Are you sure you want to delete \"\(event.name)\"? This cannot be undone.")
+                Text("Are you sure you want to delete \"\(event.name)\"? This cannot be undone.")  
             }
             
             // Expanded locations list
@@ -311,8 +313,10 @@ struct EventLocationRow: View {
                                 if (loc.deviceCount ?? 0) == 0 {
                                     Button(action: {
                                         Task {
-                                            if await appState.deleteLocation(id: loc.id) {
-                                                eventLocations.removeAll { $0.id == loc.id }
+                                            if let locId = loc.id {
+                                                if await appState.deleteLocation(id: locId) {
+                                                    eventLocations.removeAll { $0.id == loc.id }
+                                                }
                                             }
                                         }
                                     }) {
