@@ -3,6 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab: SidebarItem = .dashboard
+    @State private var easterEggTapCount = 0
+    @State private var showEasterEgg = false
+    @State private var easterEggTimer: Timer?
     
     enum SidebarItem: String, CaseIterable {
         case dashboard = "Dashboard"
@@ -57,6 +60,9 @@ struct ContentView: View {
             if appState.isStationMode && appState.stationSessionActive {
                 appState.resetStationTimer()
             }
+        }
+        .fullScreenCover(isPresented: $showEasterEgg) {
+            EasterEggVideoView(isPresented: $showEasterEgg)
         }
     }
     
@@ -322,6 +328,18 @@ struct ContentView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
                 .padding(.bottom, 8)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    easterEggTapCount += 1
+                    easterEggTimer?.invalidate()
+                    easterEggTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+                        easterEggTapCount = 0
+                    }
+                    if easterEggTapCount >= 5 {
+                        easterEggTapCount = 0
+                        showEasterEgg = true
+                    }
+                }
             }
             
             Divider()
