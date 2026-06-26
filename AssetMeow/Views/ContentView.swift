@@ -40,29 +40,34 @@ struct ContentView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Station mode session bar
-            if appState.isStationMode && appState.stationSessionActive {
-                stationSessionBar
+        ZStack {
+            VStack(spacing: 0) {
+                // Station mode session bar
+                if appState.isStationMode && appState.stationSessionActive {
+                    stationSessionBar
+                }
+                
+                mainContent
+            }
+            .onChange(of: appState.navigateToTab) { newTab in
+                if let tabName = newTab,
+                   let tab = SidebarItem(rawValue: tabName) {
+                    selectedTab = tab
+                    appState.navigateToTab = nil
+                }
+            }
+            // Reset inactivity timer on any interaction in station mode
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                if appState.isStationMode && appState.stationSessionActive {
+                    appState.resetStationTimer()
+                }
             }
             
-            mainContent
-        }
-        .onChange(of: appState.navigateToTab) { newTab in
-            if let tabName = newTab,
-               let tab = SidebarItem(rawValue: tabName) {
-                selectedTab = tab
-                appState.navigateToTab = nil
+            // Easter egg overlay
+            if showEasterEgg {
+                EasterEggVideoView(isPresented: $showEasterEgg)
+                    .transition(.opacity)
             }
-        }
-        // Reset inactivity timer on any interaction in station mode
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            if appState.isStationMode && appState.stationSessionActive {
-                appState.resetStationTimer()
-            }
-        }
-        .fullScreenCover(isPresented: $showEasterEgg) {
-            EasterEggVideoView(isPresented: $showEasterEgg)
         }
     }
     

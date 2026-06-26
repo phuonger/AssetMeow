@@ -8,13 +8,12 @@ struct EasterEggVideoView: View {
     
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-            
+            Color.black
+
             if let player = player {
                 VideoPlayer(player: player)
-                    .ignoresSafeArea()
             }
-            
+
             // Close button
             VStack {
                 HStack {
@@ -34,6 +33,7 @@ struct EasterEggVideoView: View {
                 Spacer()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             setupPlayer()
         }
