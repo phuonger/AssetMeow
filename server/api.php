@@ -1050,6 +1050,7 @@ function handleBulkMove($db, $currentUser) {
     $to_assigned_location_id = $data['to_assigned_location_id'] ?? null;
     $to_event_id = $data['to_event_id'] ?? null;
     $to_person_id = $data['to_person_id'] ?? null;
+    $status = $data['status'] ?? null;
     $notes = $data['notes'] ?? '';
 
     $results = ['moved' => 0, 'not_found' => []];
@@ -1089,7 +1090,13 @@ function handleBulkMove($db, $currentUser) {
             if ($to_person_id !== null) {
                 $updateFields[] = "assigned_to_id = ?";
                 $updateParams[] = $to_person_id;
-                $updateFields[] = "status = 'Checked Out'";
+                if ($status === null) {
+                    $updateFields[] = "status = 'Checked Out'";
+                }
+            }
+            if ($status !== null) {
+                $updateFields[] = "status = ?";
+                $updateParams[] = $status;
             }
             if (!empty($updateFields)) {
                 $updateParams[] = $device['id'];

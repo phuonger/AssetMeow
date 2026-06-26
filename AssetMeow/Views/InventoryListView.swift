@@ -36,6 +36,7 @@ struct InventoryListView: View {
     @State private var moveToEvent: Event?
     @State private var moveAssignedLocation: Location?
     @State private var moveCurrentLocation: Location?
+    @State private var moveStatus: DeviceStatus?
     @State private var isMoving = false
     @State private var moveResult = ""
     @State private var showMoveResult = false
@@ -260,6 +261,19 @@ struct InventoryListView: View {
                                 }
                             }
                             
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Status:")
+                                    .font(AppTheme.captionFont)
+                                    .foregroundColor(AppTheme.textMuted)
+                                Picker("", selection: $moveStatus) {
+                                    Text("-- Don't change --").tag(nil as DeviceStatus?)
+                                    ForEach(DeviceStatus.allCases, id: \.self) { status in
+                                        Text(status.rawValue).tag(Optional(status))
+                                    }
+                                }
+                                .frame(width: 140)
+                            }
+                            
                             Button(action: executeMoveSelected) {
                                 HStack(spacing: 4) {
                                     if isMoving {
@@ -277,7 +291,7 @@ struct InventoryListView: View {
                                 .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
-                            .disabled(moveToEvent == nil && moveAssignedLocation == nil && moveCurrentLocation == nil || isMoving)
+                            .disabled(moveToEvent == nil && moveAssignedLocation == nil && moveCurrentLocation == nil && moveStatus == nil || isMoving)
                             
                             Button(action: { showMovePanel = false }) {
                                 Image(systemName: "xmark")
@@ -862,7 +876,7 @@ struct InventoryListView: View {
     }
     
     func executeMoveSelected() {
-        guard moveToEvent != nil || moveAssignedLocation != nil || moveCurrentLocation != nil else { return }
+        guard moveToEvent != nil || moveAssignedLocation != nil || moveCurrentLocation != nil || moveStatus != nil else { return }
         isMoving = true
         
         // Get asset tags for selected device IDs
@@ -879,6 +893,7 @@ struct InventoryListView: View {
                     toAssignedLocationId: moveAssignedLocation?.id,
                     toEventId: moveToEvent?.id,
                     toPersonId: nil,
+                    toStatus: moveStatus?.rawValue,
                     notes: ""
                 )
                 await MainActor.run {
@@ -892,6 +907,7 @@ struct InventoryListView: View {
                     moveToEvent = nil
                     moveAssignedLocation = nil
                     moveCurrentLocation = nil
+                    moveStatus = nil
                     selectedDeviceIds.removeAll()
                     isMoving = false
                     loadDevices()

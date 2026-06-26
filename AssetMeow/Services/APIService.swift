@@ -245,7 +245,7 @@ class APIService {
         return try await request("devices/bulk-checkin", method: "POST", body: body)
     }
     
-    func bulkMove(assetTags: [String]? = nil, deviceIds: [Int]? = nil, toLocationId: Int?, toAssignedLocationId: Int? = nil, toEventId: Int? = nil, toPersonId: Int?, notes: String = "") async throws -> BulkResult {
+    func bulkMove(assetTags: [String]? = nil, deviceIds: [Int]? = nil, toLocationId: Int?, toAssignedLocationId: Int? = nil, toEventId: Int? = nil, toPersonId: Int?, toStatus: String? = nil, notes: String = "") async throws -> BulkResult {
         var body: [String: Any] = ["notes": notes]
         if let tags = assetTags { body["asset_tags"] = tags }
         if let ids = deviceIds { body["device_ids"] = ids }
@@ -253,6 +253,7 @@ class APIService {
         if let aLocId = toAssignedLocationId { body["to_assigned_location_id"] = aLocId }
         if let eventId = toEventId { body["to_event_id"] = eventId }
         if let personId = toPersonId { body["to_person_id"] = personId }
+        if let status = toStatus { body["status"] = status }
         return try await request("devices/bulk-move", method: "POST", body: body)
     }
     
