@@ -1222,7 +1222,10 @@ struct ScanCheckoutView: View {
                         ))
                     }
                     
-                    // Add skipped not-found tags to the session log
+                    // Add skipped not-found tags to the session log AND log them to the server activity log
+                    if !skippedNotFoundTags.isEmpty {
+                        try? await APIService.shared.logNotFound(assetTags: skippedNotFoundTags, context: "checkout")
+                    }
                     for tag in skippedNotFoundTags {
                         entries.append(ScanSessionEntry(
                             assetTag: tag,

@@ -1135,7 +1135,10 @@ struct CheckInView: View {
                     }
                 }
                 
-                // Add skipped not-found tags to the session log
+                // Add skipped not-found tags to the session log AND log them to the server activity log
+                if !skippedNotFoundTags.isEmpty {
+                    try? await APIService.shared.logNotFound(assetTags: skippedNotFoundTags, context: "check-in")
+                }
                 for tag in skippedNotFoundTags {
                     allEntries.append(ScanSessionEntry(
                         assetTag: tag,
