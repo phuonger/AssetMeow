@@ -93,7 +93,7 @@ struct DashboardView: View {
                 filter: InventoryFilterIntent()  // No filter = show all
             )
             clickableSummaryCard(
-                title: "Checked In",
+                title: "Available",
                 value: "\(checkedInCount)",
                 icon: "arrow.down.to.line",
                 color: AppTheme.statusAvailable,
@@ -226,7 +226,7 @@ struct DashboardView: View {
         HStack(spacing: 0) {
             Text("Location / Category")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Checked In")
+            Text("Available")
                 .frame(width: 120, alignment: .center)
             Text("Checked Out")
                 .frame(width: 120, alignment: .center)
