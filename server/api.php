@@ -75,6 +75,20 @@ try {
     // Silently continue
 }
 
+// ONE-TIME MIGRATION: Assign orphan locations (event_id IS NULL) to the first event (CANNES 2026)
+try {
+    $orphanCount = $db->query("SELECT COUNT(*) FROM locations WHERE event_id IS NULL")->fetchColumn();
+    if ($orphanCount > 0) {
+        // Get the first event (CANNES 2026)
+        $firstEvent = $db->query("SELECT id FROM events ORDER BY id ASC LIMIT 1")->fetch();
+        if ($firstEvent) {
+            $db->prepare("UPDATE locations SET event_id = ? WHERE event_id IS NULL")->execute([$firstEvent['id']]);
+        }
+    }
+} catch (PDOException $e) {
+    // Silently continue
+}
+
 // Create custom_fields_registry table if it doesn't exist
 try {
     $db->exec("CREATE TABLE IF NOT EXISTS custom_fields_registry (
@@ -1655,7 +1669,7 @@ function handleLocations($db, $method, $currentUser) {
                     LEFT JOIN devices d2 ON d2.assigned_location_id = l.id";
             $params = [];
             if ($event_id) {
-                $sql .= " WHERE l.event_id = ? OR l.event_id IS NULL";
+                $sql .= " WHERE l.event_id = ?";
                 $params[] = $event_id;
             }
             $sql .= " GROUP BY l.id ORDER BY l.name";
