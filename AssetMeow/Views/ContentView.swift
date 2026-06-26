@@ -152,8 +152,9 @@ struct ContentView: View {
     
     var mainContent: some View {
         HStack(spacing: 0) {
-            // Custom sidebar
+            // Custom sidebar - never shrinks
             sidebarView
+                .layoutPriority(1)
             
             // Main content area
             ZStack {
@@ -435,6 +436,8 @@ struct ContentView: View {
             }
         }
         .frame(width: AppTheme.sidebarWidth)
+        .frame(minWidth: AppTheme.sidebarWidth)
+        .fixedSize(horizontal: true, vertical: false)
         .background(
             ZStack {
                 AppTheme.backgroundDark
