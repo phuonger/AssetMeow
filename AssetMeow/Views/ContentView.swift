@@ -40,34 +40,29 @@ struct ContentView: View {
     }
     
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                // Station mode session bar
-                if appState.isStationMode && appState.stationSessionActive {
-                    stationSessionBar
-                }
-                
-                mainContent
-            }
-            .onChange(of: appState.navigateToTab) { newTab in
-                if let tabName = newTab,
-                   let tab = SidebarItem(rawValue: tabName) {
-                    selectedTab = tab
-                    appState.navigateToTab = nil
-                }
-            }
-            // Reset inactivity timer on any interaction in station mode
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                if appState.isStationMode && appState.stationSessionActive {
-                    appState.resetStationTimer()
-                }
+        VStack(spacing: 0) {
+            // Station mode session bar
+            if appState.isStationMode && appState.stationSessionActive {
+                stationSessionBar
             }
             
-            // Easter egg overlay
-            if showEasterEgg {
-                EasterEggVideoView(isPresented: $showEasterEgg)
-                    .transition(.opacity)
+            mainContent
+        }
+        .onChange(of: appState.navigateToTab) { newTab in
+            if let tabName = newTab,
+               let tab = SidebarItem(rawValue: tabName) {
+                selectedTab = tab
+                appState.navigateToTab = nil
             }
+        }
+        // Reset inactivity timer on any interaction in station mode
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if appState.isStationMode && appState.stationSessionActive {
+                appState.resetStationTimer()
+            }
+        }
+        .sheet(isPresented: $showEasterEgg) {
+            EasterEggVideoView(isPresented: $showEasterEgg)
         }
     }
     
