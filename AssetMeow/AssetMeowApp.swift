@@ -31,14 +31,23 @@ struct CheckForUpdatesView: View {
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
-            // No visible windows — re-open the main window
-            for window in sender.windows {
-                if window.canBecomeMain {
+            // No visible windows — try to re-open any existing window
+            // First try to find the main app window (not the easter egg or settings)
+            let mainWindow = sender.windows.first(where: { window in
+                window.canBecomeMain && 
+                window.title != "AssetMeow Easter Egg" &&
+                !window.title.contains("Settings")
+            })
+            
+            if let window = mainWindow {
+                window.makeKeyAndOrderFront(self)
+            } else {
+                // Try any window that can become main
+                for window in sender.windows where window.canBecomeMain {
                     window.makeKeyAndOrderFront(self)
-                    return true
+                    break
                 }
             }
-            // If no existing window found, the WindowGroup will create a new one
         }
         return true
     }

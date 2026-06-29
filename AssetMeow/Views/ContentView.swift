@@ -4,7 +4,6 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab: SidebarItem = .dashboard
     @State private var easterEggTapCount = 0
-    @State private var showEasterEgg = false
     @State private var easterEggTimer: Timer?
     
     enum SidebarItem: String, CaseIterable {
@@ -61,9 +60,7 @@ struct ContentView: View {
                 appState.resetStationTimer()
             }
         }
-        .sheet(isPresented: $showEasterEgg) {
-            EasterEggVideoView(isPresented: $showEasterEgg)
-        }
+
     }
     
     // MARK: - Station Session Bar
@@ -337,7 +334,7 @@ struct ContentView: View {
                     }
                     if easterEggTapCount >= 5 {
                         easterEggTapCount = 0
-                        showEasterEgg = true
+                        EasterEggWindowController.shared.show()
                     }
                 }
             }
