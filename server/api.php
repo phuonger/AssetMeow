@@ -1716,6 +1716,34 @@ function handleLocations($db, $method, $currentUser) {
             echo json_encode(['success' => true, 'id' => $locId, 'name' => $name]);
             break;
 
+        case 'PUT':
+            $data = json_decode(file_get_contents('php://input'), true);
+            $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($data['id']) ? (int)$data['id'] : 0);
+            if (!$id) {
+                echo json_encode(['error' => 'ID is required']);
+                return;
+            }
+            $updates = [];
+            $params = [];
+            if (isset($data['name']) && !empty(trim($data['name']))) {
+                $updates[] = "name = ?";
+                $params[] = strtoupper(trim($data['name']));
+            }
+            if (isset($data['event_id'])) {
+                $updates[] = "event_id = ?";
+                $params[] = $data['event_id'] ? (int)$data['event_id'] : null;
+            }
+            if (empty($updates)) {
+                echo json_encode(['error' => 'No fields to update']);
+                return;
+            }
+            $params[] = $id;
+            $sql = "UPDATE locations SET " . implode(', ', $updates) . " WHERE id = ?";
+            $db->prepare($sql)->execute($params);
+            logActivity($db, null, null, 'Location Updated', null, $id, null, null, "Updated location ID: $id", $currentUser);
+            echo json_encode(['success' => true, 'id' => $id]);
+            break;
+
         case 'DELETE':
             $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
             $db->prepare("DELETE FROM locations WHERE id = ?")->execute([$id]);
@@ -1766,6 +1794,42 @@ function handlePeople($db, $method, $currentUser) {
             logActivity($db, null, null, 'Person Created', null, null, null, null, "Created person: $name", $currentUser);
             
             echo json_encode(['success' => true, 'id' => (int)$db->lastInsertId(), 'name' => $name]);
+            break;
+
+        case 'PUT':
+            $data = json_decode(file_get_contents('php://input'), true);
+            $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($data['id']) ? (int)$data['id'] : 0);
+            if (!$id) {
+                echo json_encode(['error' => 'ID is required']);
+                return;
+            }
+            $updates = [];
+            $params = [];
+            if (isset($data['name']) && !empty(trim($data['name']))) {
+                $updates[] = "name = ?";
+                $params[] = strtoupper(trim($data['name']));
+            }
+            if (array_key_exists('role', $data)) {
+                $updates[] = "role = ?";
+                $params[] = $data['role'] ? strtoupper(trim($data['role'])) : null;
+            }
+            if (isset($data['email'])) {
+                $updates[] = "email = ?";
+                $params[] = trim($data['email']) ?: null;
+            }
+            if (isset($data['event_id'])) {
+                $updates[] = "event_id = ?";
+                $params[] = $data['event_id'] ? (int)$data['event_id'] : null;
+            }
+            if (empty($updates)) {
+                echo json_encode(['error' => 'No fields to update']);
+                return;
+            }
+            $params[] = $id;
+            $sql = "UPDATE people SET " . implode(', ', $updates) . " WHERE id = ?";
+            $db->prepare($sql)->execute($params);
+            logActivity($db, null, null, 'Person Updated', null, null, null, null, "Updated person ID: $id", $currentUser);
+            echo json_encode(['success' => true, 'id' => $id]);
             break;
 
         case 'DELETE':

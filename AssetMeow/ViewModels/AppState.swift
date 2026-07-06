@@ -455,6 +455,52 @@ class AppState: ObservableObject {
         return false
     }
     
+    // MARK: - Update Person
+    func updatePerson(id: Int, name: String?, role: String?) async -> Bool {
+        guard isConnected else {
+            toast.error("No Connection", detail: "Cannot update person while offline.")
+            return false
+        }
+        do {
+            let resp = try await api.updatePerson(id: id, name: name, role: role)
+            if resp.success == true {
+                if let idx = people.firstIndex(where: { $0.id == id }) {
+                    if let newName = name { people[idx].name = newName.uppercased() }
+                    if let newRole = role { people[idx].role = newRole.isEmpty ? nil : newRole.uppercased() }
+                }
+                toast.success("Person Updated", detail: "Person updated successfully.")
+                return true
+            } else {
+                let errorMsg = resp.error ?? "Unknown error"
+                toast.error("Failed to Update Person", detail: errorMsg)
+            }
+        } catch {
+            toast.error("Connection Error", detail: "Could not update person: \(error.localizedDescription)")
+        }
+        return false
+    }
+    
+    // MARK: - Update Location
+    func updateLocation(id: Int, name: String) async -> Bool {
+        guard isConnected else {
+            toast.error("No Connection", detail: "Cannot update location while offline.")
+            return false
+        }
+        do {
+            let resp = try await api.updateLocation(id: id, name: name)
+            if resp.success == true {
+                toast.success("Location Updated", detail: "Location renamed successfully.")
+                return true
+            } else {
+                let errorMsg = resp.error ?? "Unknown error"
+                toast.error("Failed to Update Location", detail: errorMsg)
+            }
+        } catch {
+            toast.error("Connection Error", detail: "Could not update location: \(error.localizedDescription)")
+        }
+        return false
+    }
+    
     // MARK: - Connection Test
     func testConnection() async {
         isLoading = true

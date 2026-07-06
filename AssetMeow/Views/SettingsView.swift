@@ -144,24 +144,10 @@ struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 ScrollView {
                                     ForEach(appState.people, id: \.id) { person in
-                                        HStack {
-                                            Text(person.name)
-                                                .font(AppTheme.bodyFont)
-                                                .foregroundColor(AppTheme.textSecondary)
-                                            if let role = person.role {
-                                                Text("(\(role))")
-                                                    .font(AppTheme.captionFont)
-                                                    .foregroundColor(AppTheme.textMuted)
-                                            }
-                                            Spacer()
-                                            Text("\(person.deviceCount ?? 0)")
-                                                .font(AppTheme.captionFont)
-                                                .foregroundColor(AppTheme.textMuted)
-                                        }
-                                        .padding(.vertical, 2)
+                                        PersonRow(person: person, appState: appState)
                                     }
                                 }
-                                .frame(maxHeight: 120)
+                                .frame(maxHeight: 200)
                                 
                                 Rectangle().fill(AppTheme.surfaceBorder).frame(height: 1)
                                 
@@ -208,6 +194,107 @@ struct SettingsView: View {
             await appState.testConnection()
             testResult = appState.isConnected ? "Success! Connected." : "Failed: \(appState.statusMessage)"
             isTesting = false
+        }
+    }
+}
+
+// MARK: - Person Row (editable)
+struct PersonRow: View {
+    let person: Person
+    @ObservedObject var appState: AppState
+    
+    @State private var isEditing = false
+    @State private var editName: String = ""
+    @State private var editRole: String = ""
+    @State private var showDeleteConfirm = false
+    
+    var body: some View {
+        if isEditing {
+            HStack(spacing: 6) {
+                TextField("Name", text: $editName)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTheme.captionFont)
+                TextField("Role", text: $editRole)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTheme.captionFont)
+                    .frame(width: 80)
+                Button(action: {
+                    Task {
+                        let newName = editName.trimmingCharacters(in: .whitespaces)
+                        let newRole = editRole.trimmingCharacters(in: .whitespaces)
+                        if !newName.isEmpty, let personId = person.id {
+                            let _ = await appState.updatePerson(id: personId, name: newName, role: newRole)
+                            await appState.loadLocationsAndPeople()
+                        }
+                        isEditing = false
+                    }
+                }) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(AppTheme.statusAvailable)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                Button(action: { isEditing = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(AppTheme.textMuted)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 2)
+        } else {
+            HStack {
+                Text(person.name)
+                    .font(AppTheme.bodyFont)
+                    .foregroundColor(AppTheme.textSecondary)
+                if let role = person.role {
+                    Text("(\(role))")
+                        .font(AppTheme.captionFont)
+                        .foregroundColor(AppTheme.textMuted)
+                }
+                Spacer()
+                Text("\(person.deviceCount ?? 0)")
+                    .font(AppTheme.captionFont)
+                    .foregroundColor(AppTheme.textMuted)
+                
+                // Edit button
+                Button(action: {
+                    editName = person.name
+                    editRole = person.role ?? ""
+                    isEditing = true
+                }) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppTheme.primaryPurpleLight.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Edit person")
+                
+                // Delete button
+                Button(action: {
+                    showDeleteConfirm = true
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundColor(AppTheme.statusMissing.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .help("Delete person")
+            }
+            .padding(.vertical, 2)
+            .alert("Delete Person?", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        if let personId = person.id {
+                            let _ = await appState.deletePerson(id: personId)
+                            await appState.loadLocationsAndPeople()
+                        }
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete \"\(person.name)\"? This cannot be undone.")
+            }
         }
     }
 }
@@ -297,40 +384,12 @@ struct EventLocationRow: View {
                         }
                         .padding(.leading, 40)
                     } else {
-                        ForEach(eventLocations, id: \.id) { loc in
-                            HStack {
-                                Image(systemName: "mappin")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(AppTheme.accentCyan)
-                                Text(loc.name)
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.textSecondary)
-                                Spacer()
-                                Text("\(loc.deviceCount ?? 0)")
-                                    .font(AppTheme.captionFont)
-                                    .foregroundColor(AppTheme.textMuted)
-                                // Delete location button (only if 0 devices)
-                                if (loc.deviceCount ?? 0) == 0 {
-                                    Button(action: {
-                                        Task {
-                                            if let locId = loc.id {
-                                                if await appState.deleteLocation(id: locId) {
-                                                    eventLocations.removeAll { $0.id == loc.id }
-                                                }
-                                            }
-                                        }
-                                    }) {
-                                        Image(systemName: "trash")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(AppTheme.statusMissing.opacity(0.6))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Delete location")
-                                }
-                            }
-                            .padding(.vertical, 3)
-                            .padding(.leading, 40)
-                            .padding(.trailing, 8)
+                        ForEach(Array(eventLocations.enumerated()), id: \.element.id) { index, loc in
+                            LocationRow(location: loc, appState: appState, onUpdate: {
+                                loadLocations()
+                            }, onDelete: {
+                                eventLocations.removeAll { $0.id == loc.id }
+                            })
                         }
                         
                         if eventLocations.isEmpty {
@@ -376,6 +435,112 @@ struct EventLocationRow: View {
         Task {
             eventLocations = await appState.loadLocationsForEvent(event.id)
             isLoadingLocations = false
+        }
+    }
+}
+
+// MARK: - Location Row (editable)
+struct LocationRow: View {
+    let location: Location
+    @ObservedObject var appState: AppState
+    var onUpdate: () -> Void
+    var onDelete: () -> Void
+    
+    @State private var isEditing = false
+    @State private var editName: String = ""
+    @State private var showDeleteConfirm = false
+    
+    var body: some View {
+        if isEditing {
+            HStack(spacing: 6) {
+                Image(systemName: "mappin")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppTheme.accentCyan)
+                TextField("Location name", text: $editName)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTheme.captionFont)
+                Button(action: {
+                    Task {
+                        let newName = editName.trimmingCharacters(in: .whitespaces)
+                        if !newName.isEmpty, let locId = location.id {
+                            let success = await appState.updateLocation(id: locId, name: newName)
+                            if success {
+                                onUpdate()
+                            }
+                        }
+                        isEditing = false
+                    }
+                }) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(AppTheme.statusAvailable)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+                Button(action: { isEditing = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(AppTheme.textMuted)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 3)
+            .padding(.leading, 40)
+            .padding(.trailing, 8)
+        } else {
+            HStack {
+                Image(systemName: "mappin")
+                    .font(.system(size: 10))
+                    .foregroundColor(AppTheme.accentCyan)
+                Text(location.name)
+                    .font(AppTheme.captionFont)
+                    .foregroundColor(AppTheme.textSecondary)
+                Spacer()
+                Text("\(location.deviceCount ?? 0)")
+                    .font(AppTheme.captionFont)
+                    .foregroundColor(AppTheme.textMuted)
+                
+                // Edit button
+                Button(action: {
+                    editName = location.name
+                    isEditing = true
+                }) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10))
+                        .foregroundColor(AppTheme.primaryPurpleLight.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .help("Edit location name")
+                
+                // Delete location button (only if 0 devices)
+                if (location.deviceCount ?? 0) == 0 {
+                    Button(action: {
+                        showDeleteConfirm = true
+                    }) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10))
+                            .foregroundColor(AppTheme.statusMissing.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete location")
+                }
+            }
+            .padding(.vertical, 3)
+            .padding(.leading, 40)
+            .padding(.trailing, 8)
+            .alert("Delete Location?", isPresented: $showDeleteConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    Task {
+                        if let locId = location.id {
+                            if await appState.deleteLocation(id: locId) {
+                                onDelete()
+                            }
+                        }
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete \"\(location.name)\"? This cannot be undone.")
+            }
         }
     }
 }

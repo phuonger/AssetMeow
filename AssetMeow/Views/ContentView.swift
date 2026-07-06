@@ -330,11 +330,17 @@ struct ContentView: View {
                     easterEggTapCount += 1
                     easterEggTimer?.invalidate()
                     easterEggTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-                        easterEggTapCount = 0
+                        DispatchQueue.main.async {
+                            easterEggTapCount = 0
+                        }
                     }
                     if easterEggTapCount >= 5 {
                         easterEggTapCount = 0
-                        EasterEggWindowController.shared.show()
+                        easterEggTimer?.invalidate()
+                        // Delay slightly to let SwiftUI finish its state update
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            EasterEggWindowController.shared.show()
+                        }
                     }
                 }
             }
