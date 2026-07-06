@@ -328,7 +328,7 @@ class APIService {
     
     func updateLocation(id: Int, name: String) async throws -> GenericResponse {
         let body: [String: Any] = ["name": name]
-        return try await request("locations", method: "PUT", queryParams: ["id": "\(id)"], body: body)
+        return try await request("locations", method: "PUT", body: body, queryParams: ["id": "\(id)"])
     }
     
     func deleteLocation(id: Int) async throws -> GenericResponse {
@@ -354,7 +354,7 @@ class APIService {
         var body: [String: Any] = [:]
         if let name = name { body["name"] = name }
         if let role = role { body["role"] = role }
-        return try await request("people", method: "PUT", queryParams: ["id": "\(id)"], body: body)
+        return try await request("people", method: "PUT", body: body, queryParams: ["id": "\(id)"])
     }
     
     func deletePerson(id: Int) async throws -> GenericResponse {
